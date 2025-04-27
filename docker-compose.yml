@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  app:
+    build: 
+      context: .
+        # dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000" # mapping app port 3000 from host to container
+      - "9229:9229" # for debug
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - .:/app      # change timely
+      - /app/node_modules #except node_modules in container
+      - /app/out
+
