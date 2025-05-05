@@ -1,12 +1,17 @@
-import express, { Request, Response } from 'express';
+import express from 'express'
+import dotenv from 'dotenv'
+import { errorHandler } from './middleware/errorhandler.middleware'
+import helloRoute from './route/hello.route'
 
-const app = express();
-const port = 3000;
+dotenv.config()
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, World!');
-});
+const app = express()
+const port = process.env.APP_PORT
+
+app.use('/api/hello', helloRoute)
+app.use(errorHandler)
 
 app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
-});
+    console.log(`${process.env.APP_NAME}`)
+    console.log(`Server is running at http://localhost:${port}`)
+})
