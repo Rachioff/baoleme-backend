@@ -14,10 +14,11 @@ passport.use(new JWTStrategy(jwtOptions, async (payload, done) => {
         const user = await prisma.user.findUnique({
             where: { id: payload.sub, password: payload.pwd }
         });
-        return user ? done(null, user) : done(null, false);
+        return user ? done(null, user) : done(new Error());
     } catch (error) {
         return done(error);
     }
+
 }))
 
 export default passport

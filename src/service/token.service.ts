@@ -11,3 +11,7 @@ export function generateVerifyToken(userId: string) {
 export function generateUpdateEmailToken(userId: string, newEmail: string) {
     return jwt.sign({ sub: userId, email: newEmail }, process.env.JWT_SECRET!, { expiresIn: '1h' })
 };
+
+export function generateResetPasswordToken(userId: string) {
+    return jwt.sign({ sub: userId, resetPassword: true }, process.env.JWT_SECRET!, { expiresIn: '1h' })
+}
