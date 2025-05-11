@@ -1,5 +1,5 @@
 # step1: build
-FROM node:22.14.0 as builder
+FROM node:22.14.0 AS builder
 
 ENV NODE_ENV=development
 

@@ -52,7 +52,7 @@ services:
       - POSTGRES_DB=postgres_db
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # 初始化脚本（可选）
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # 初始化postgres脚本（可选）
     ports:
       - "5432:5432"
     healthcheck:
@@ -64,7 +64,7 @@ services:
       - app-network
 
 volumes:
-  postgres-data:
+  postgres-data: # Docker 自动管理的命名卷
   minio-data:
 
 networks:
