@@ -17,4 +17,3 @@ export interface UpdateUserProfile {
     name?: string;
     description?: string;
 }
-

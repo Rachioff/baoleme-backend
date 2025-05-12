@@ -1,19 +1,19 @@
 enum userrole {
-  USER      
-  MERCHANT   
-  RIDER     
-  ADMIN     
+    USER
+    MERCHANT
+    RIDER
+    ADMIN
 }
 
 model User {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email       String    @unique
-  password    String
-  role        userrole  @default(USER)
-  name        String?   
-  description String?
-  avatarPath  String?
-  isVerified  Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+    id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    email       String    @unique
+    password    String
+    role        userrole  @default(USER)
+    name        String?   
+    description String?
+    avatarPath  String?
+    isVerified  Boolean   @default(false)
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
 }
