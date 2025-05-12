@@ -35,3 +35,21 @@ export const forgotPassword = Joi.object({
 export interface ForgotPassword {
     email: string
 }
+
+export const verifyToken = Joi.object({
+    token: Joi.string().required()
+})
+
+export interface VerifyToken {
+    token: string
+}
+
+export const resetPassword = Joi.object({
+    token: Joi.string().required(),
+    newPassword: Joi.string().min(6).required()
+})
+
+export interface ResetPassword {
+    token: string
+    newPassword: string
+}

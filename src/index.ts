@@ -1,10 +1,11 @@
-import express from 'express'
+
 import dotenv from 'dotenv'
+dotenv.config()
+import express from 'express'
 import { errorHandler } from './middleware/errorhandler.middleware'
 import apiRoute from './route/api.route'
 
-dotenv.config()
-
+console.log('JWT_SECRET:', process.env.JWT_SECRET);
 const app = express()
 const port = process.env.APP_PORT
 

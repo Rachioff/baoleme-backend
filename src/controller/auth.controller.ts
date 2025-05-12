@@ -6,6 +6,7 @@ import { sendResetPasswordEmail, sendVerificationEmail } from '../service/mail.s
 import { generateAccessToken, generateResetPasswordToken, generateUpdateEmailToken, generateVerifyToken } from '../service/token.service'
 import { ResponseError } from '../util/errors'
 import { requireAuth, route, validate } from '../util/decorators'
+import jwt from 'jsonwebtoken'
 
 const prisma = new PrismaClient()
 const SALT_ROUNDS = 10
@@ -39,6 +40,7 @@ export default class AuthController {
         const { email, password } = req.body as AuthSchema.RegisterLogin
     
         const user = await prisma.user.findUnique({ where: { email, isVerified: true } })
+
         if (!user || !await bcrypt.compare(password, user.password)) {
             throw new ResponseError(403, 'Cannot login')
         }
@@ -87,6 +89,66 @@ export default class AuthController {
         }
         const token = generateResetPasswordToken(user.id)
         await sendResetPasswordEmail(user.email, token)
+        res.status(204).send()
+    }
+
+    @route('post', '/auth/verify-email')
+    @validate('body', AuthSchema.verifyToken)
+    static async verifyEmail(req: Request, res: Response) {
+        const { token } = req.body as AuthSchema.VerifyToken
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload
+            
+        if (!decoded.verify && !decoded.email) {
+            throw new ResponseError(400, 'Invalid token')
+        }
+            
+        const userId = decoded.sub as string
+            
+        const user = await prisma.user.findUnique({ where: { id: userId } })
+            if (!user) {
+                throw new ResponseError(400, 'User not found')
+            }
+
+        if (decoded.email) {
+            await prisma.user.update({
+                where: { id: userId },
+                data: { email: decoded.email as string }
+            })
+        } else {
+            await prisma.user.update({
+                where: { id: userId },
+                data: { isVerified: true }
+            })
+        }
+        res.status(204).send()
+    }
+
+    @route('post', '/auth/reset-password')
+    @validate('body', AuthSchema.resetPassword)
+    static async resetPassword(req: Request, res: Response) {
+        const { token, newPassword } = req.body as AuthSchema.ResetPassword
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload
+            
+        if (!decoded.resetPassword) {
+            throw new ResponseError(400, 'Invalid token')
+        }
+            
+        const userId = decoded.sub as string
+            
+        const user = await prisma.user.findUnique({ where: { id: userId } })
+        if (!user) {
+            throw new ResponseError(400, 'User not found')
+        }
+            
+        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS)
+            
+        await prisma.user.update({
+            where: { id: userId },
+            data: { password: hashedPassword }
+        })
+            
         res.status(204).send()
     }
 }
