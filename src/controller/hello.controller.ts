@@ -1,18 +1,20 @@
-import { Request, Response } from 'express'
+import { Router } from 'express'
 import { ResponseError } from '../util/errors'
-import { route } from '../util/decorators'
 
-export default class HelloController {
+const router = Router()
 
-    @route('get', '/hello')
-    static async hello(req: Request, res: Response) {
-        res.json({
-            'message': 'Hello World!'
-        })
+router.get(
+    '/hello',
+    async (req, res) => {
+        res.json({ 'message': 'Hello World!' })
     }
+)
 
-    @route('get', '/hello/teapot')
-    static async teapot(req: Request, res: Response) {
+router.get(
+    '/hello/teapot',
+    async (req, res) => {
         throw new ResponseError(418, "I'm a teapot")
     }
-}
+)
+
+export default router

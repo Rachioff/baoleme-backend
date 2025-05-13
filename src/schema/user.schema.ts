@@ -1,16 +1,12 @@
 import Joi from 'joi'
 
-export const getUserProfile = Joi.object({
+export const userProfileParams = Joi.object({
     id: Joi.string().uuid().required()
 })
 
-export interface GetUserProfile {
-    id: string
-}
-
 export const updateUserProfile = Joi.object({
-    name: Joi.string().allow('').optional(),
-    description: Joi.string().allow('').optional()
+    name: Joi.string().optional(),
+    description: Joi.string().optional()
 })
 
 export interface UpdateUserProfile {

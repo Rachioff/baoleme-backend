@@ -1,13 +1,15 @@
-import { Router } from "express"
-import { getRouter } from "../util/decorators"
-import HelloController from "../controller/hello.controller"
-import AuthController from "../controller/auth.controller"
-import UserController from "../controller/user.controller"
+import express, { Router } from "express"
+import helloController from "../controller/hello.controller"
+import authController from "../controller/auth.controller"
+import userController from "../controller/user.controller"
+import { errorHandler } from "../middleware/errorhandler.middleware"
 
 const router = Router()
 
-router.use('/', getRouter(HelloController))
-router.use('/', getRouter(AuthController))
-router.use('/', getRouter(UserController))
+router.use(express.json())
+router.use('/', helloController)
+router.use('/', authController)
+router.use('/', userController)
+router.use(errorHandler)
 
 export default router

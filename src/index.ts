@@ -1,16 +1,14 @@
 
 import dotenv from 'dotenv'
-dotenv.config()
 import express from 'express'
-import { errorHandler } from './middleware/errorhandler.middleware'
 import apiRoute from './route/api.route'
+
+dotenv.config()
 
 const app = express()
 const port = process.env.APP_PORT
 
-app.use(express.json())
 app.use('/api', apiRoute)
-app.use(errorHandler)
 
 app.listen(port, () => {
     console.log(`${process.env.APP_NAME}`)
