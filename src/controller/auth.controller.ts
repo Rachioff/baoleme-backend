@@ -25,7 +25,7 @@ router.post(
         const user = await AuthService.createUser(email, password)
     
         const token = TokenService.generateVerifyToken(user.id)
-        await MailService.sendVerificationEmail(email, token)
+        await MailService.sendVerifyRegisterEmail(email, token)
     
         res.status(204).send()
     }
@@ -55,8 +55,8 @@ router.post(
     async (req, res) => {
         const { newEmail } = req.body as AuthSchema.UpdateEmail
 
-        const token = TokenService.generateUpdateEmailToken((req.user as User).id, newEmail)
-        await MailService.sendVerificationEmail(newEmail, token)
+        const token = TokenService.generateUpdateEmailToken(req.user!.id, newEmail)
+        await MailService.sendVerifyEmailEmail(newEmail, token)
 
         res.status(204).send()
     }
@@ -68,7 +68,7 @@ router.post(
     validateBody(AuthSchema.updatePassword),
     async (req, res) => {
         const { oldPassword, newPassword } = req.body as AuthSchema.UpdatePassword
-        const user = req.user as User
+        const user = req.user!
         if (!await bcrypt.compare(oldPassword, user.password)) {
             throw new ResponseError(403, 'Old password is wrong')
         }

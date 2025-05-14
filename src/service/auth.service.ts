@@ -1,13 +1,23 @@
 import bcrypt from 'bcrypt'
-import { PrismaClient, User } from '@prisma/client'
+import { User } from '@prisma/client'
+import { ResponseError } from '../util/errors'
+import { getPrismaClient } from '../util/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrismaClient()
 const SALT_ROUNDS = 10
 
 export async function getUserById(id: string, encryptedPassword?: string): Promise<User | null> {
     const user = await prisma.user.findUnique({ where: { id } })
     if (user && encryptedPassword && encryptedPassword !== user?.password) {
         return null
+    }
+    return user
+}
+
+export async function getUserByIdOrElse404(id: string): Promise<User> {
+    const user = await getUserById(id)
+    if (!user) {
+        throw new ResponseError(404, 'User not found')
     }
     return user
 }

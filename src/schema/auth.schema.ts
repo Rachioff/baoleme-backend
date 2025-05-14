@@ -3,7 +3,7 @@ import Joi from 'joi'
 export const registerLogin = Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().min(6).required()
-})
+}).required()
 
 export interface RegisterLogin {
     email: string
@@ -12,7 +12,7 @@ export interface RegisterLogin {
 
 export const updateEmail = Joi.object({
     newEmail: Joi.string().email().required()
-})
+}).required()
 
 export interface UpdateEmail {
     newEmail: string
@@ -21,7 +21,7 @@ export interface UpdateEmail {
 export const updatePassword = Joi.object({
     oldPassword: Joi.string().required(),
     newPassword: Joi.string().min(6).required()
-})
+}).required()
 
 export interface UpdatePassword {
     oldPassword: string
@@ -30,7 +30,7 @@ export interface UpdatePassword {
 
 export const forgotPassword = Joi.object({
     email: Joi.string().required()
-})
+}).required()
 
 export interface ForgotPassword {
     email: string
@@ -38,7 +38,7 @@ export interface ForgotPassword {
 
 export const verifyToken = Joi.object({
     token: Joi.string().required()
-})
+}).required()
 
 export interface VerifyToken {
     token: string
@@ -47,7 +47,7 @@ export interface VerifyToken {
 export const resetPassword = Joi.object({
     token: Joi.string().required(),
     newPassword: Joi.string().min(6).required()
-})
+}).required()
 
 export interface ResetPassword {
     token: string
