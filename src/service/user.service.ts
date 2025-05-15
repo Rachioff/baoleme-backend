@@ -1,65 +1,84 @@
 import { PrismaClient, User, UserRole } from '@prisma/client'
 import * as uuid from 'uuid'
-import * as OSSService from './oss.service'
 import { ResponseError } from '../util/errors'
 import sharp from 'sharp'
 import fs from 'fs'
-import initializeRoutine from '../app/initializeRoutine'
-import { getPrismaClient } from '../util/prisma'
-import logger from '../app/logger'
+import OSSService from './oss.service'
+import { asyncInitializeRoutine } from '../app/container'
+import { Logger } from 'pino'
+import { classInjection, injected } from '../util/injection-decorators'
 
-const prisma = getPrismaClient()
+@classInjection
+export default class UserService {
 
-initializeRoutine.addAsyncRoutine(async () => {
-    logger.info('Checking OSS avatar bucket')
-    if (await OSSService.createBucketIfNotExist('avatar')) {
-        logger.info('Avatar bucket does not exist, creating...')
-        await uploadUserAvatar('default', fs.readFileSync('assets/default-avatar.svg'))
+    @injected('logger', true)
+    private logger!: Logger
+
+    @injected
+    private prisma!: PrismaClient
+
+    @injected
+    private ossService!: OSSService
+
+    constructor() {
+        asyncInitializeRoutine.addInitializer(async () => {
+            try {
+                this.logger.info('Checking OSS avatar bucket')
+                if (await this.ossService.createBucketIfNotExist('avatar')) {
+                    this.logger.info('Avatar bucket does not exist, creating...')
+                    await this.uploadUserAvatar('default', fs.readFileSync('assets/default-avatar.svg'))
+                }
+                this.logger.info('OSS avatar bucket OK')
+            } catch (err) {
+                this.logger.error({ err }, 'OSS avatar bucket check failed')
+                process.exit(1)
+            }
+        })
     }
-    logger.info('OSS avatar bucket OK')
-})
 
-export function hasModifyPermissionOrElse403(currentUser: User, userId: string) {
-    if (currentUser.role === UserRole.ADMIN) {
-        return
+    hasModifyPermissionOrElse403(currentUser: User, userId: string) {
+        if (currentUser.role === UserRole.ADMIN) {
+            return
+        }
+        if (!uuid.parse(userId).every(v => v === 0)) {
+            throw new ResponseError(403, 'Permission denied')
+        }
     }
-    if (!uuid.parse(userId).every(v => v === 0)) {
-        throw new ResponseError(403, 'Permission denied')
+
+    getTargetId(currentUser: User, userId: string) {
+        return uuid.parse(userId).every(v => v === 0) ? currentUser.id : userId
     }
-}
 
-export function getTargetId(currentUser: User, userId: string) {
-    return uuid.parse(userId).every(v => v === 0) ? currentUser.id : userId
-}
+    async updateUserProfile(id: string, name?: string, description?: string): Promise<User> {
+        return await this.prisma.user.update({
+            where: { id },
+            data: { name, description }
+        })
+    }
 
-export async function updateUserProfile(id: string, name?: string, description?: string): Promise<User> {
-    return await prisma.user.update({
-        where: { id },
-        data: { name, description }
-    })
-}
+    async getUserAvatarLinks(id: string): Promise<{ avatar: string, thumbnail: string }> {
+        if (await this.ossService.existsObject('avatar', `${id}.webp`)) {
+            const [avatar, thumbnail] = await Promise.all([this.ossService.getObjectUrl('avatar', `${id}.webp`), this.ossService.getObjectUrl('avatar', `${id}-thumbnail.webp`)])
+            return { avatar, thumbnail }
+        } else {
+            const [avatar, thumbnail] = await Promise.all([this.ossService.getObjectUrl('avatar', `default.webp`), this.ossService.getObjectUrl('avatar', `default-thumbnail.webp`)])
+            return { avatar, thumbnail }
+        }
+    }
 
-export async function getUserAvatarLinks(id: string): Promise<{ avatar: string, thumbnail: string }> {
-    if (await OSSService.existsObject('avatar', `${id}.webp`)) {
-        const [avatar, thumbnail] = await Promise.all([OSSService.getObjectUrl('avatar', `${id}.webp`), OSSService.getObjectUrl('avatar', `${id}-thumbnail.webp`)])
+    async uploadUserAvatar(id: string, buffer: Buffer): Promise<{ avatar: string, thumbnail: string }> {
+        const [avatar, thumbnail] = await Promise.all([
+            this.ossService.putObject('avatar', `${id}.webp`, sharp(buffer).toFormat('webp')),
+            this.ossService.putObject('avatar', `${id}-thumbnail.webp`, sharp(buffer).resize(128, 128).toFormat('webp'))
+        ])
         return { avatar, thumbnail }
-    } else {
-        const [avatar, thumbnail] = await Promise.all([OSSService.getObjectUrl('avatar', `default.webp`), OSSService.getObjectUrl('avatar', `default-thumbnail.webp`)])
-        return { avatar, thumbnail }
     }
-}
 
-export async function uploadUserAvatar(id: string, buffer: Buffer): Promise<{ avatar: string, thumbnail: string }> {
-    const [avatar, thumbnail] = await Promise.all([
-        OSSService.putObject('avatar', `${id}.webp`, sharp(buffer).toFormat('webp')),
-        OSSService.putObject('avatar', `${id}-thumbnail.webp`, sharp(buffer).resize(128, 128).toFormat('webp'))
-    ])
-    return { avatar, thumbnail }
-}
-
-export async function deleteUserAvatar(id: string) {
-    await Promise.all([
-        OSSService.removeObject('avatar', `${id}.webp`),
-        OSSService.removeObject('avatar', `${id}-thumbnail.webp`)
-    ])
+    async deleteUserAvatar(id: string) {
+        await Promise.all([
+            this.ossService.removeObject('avatar', `${id}.webp`),
+            this.ossService.removeObject('avatar', `${id}-thumbnail.webp`)
+        ])
+    }
+   
 }

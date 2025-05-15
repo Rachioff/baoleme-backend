@@ -1,17 +1,20 @@
 
 import dotenv from 'dotenv'
-import initializeRoutine from './app/initializeRoutine'
-import app from './app/app'
-import logger from './app/logger'
+import { Express } from 'express'
+import { container, asyncInitializeRoutine } from './app/container'
+import { Logger } from 'pino'
 
 dotenv.config()
-const port = process.env.APP_PORT
+
+const port = parseInt(process.env.APP_PORT!)
+
+const logger: Logger = container.resolve('logger')
+const app: Express = container.resolve('app')
 
 logger.info(`${process.env.APP_NAME} has started`)
-
 logger.info(`Initializing...`)
 
-initializeRoutine.run().then(() => {
+asyncInitializeRoutine.initialize().then(() => {
     logger.info(`Initializing finished, starting listening...`)
     app.listen(port, () => {
         logger.info(`Server is running at http://localhost:${port}`)

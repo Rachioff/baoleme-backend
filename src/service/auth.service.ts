@@ -1,61 +1,92 @@
 import bcrypt from 'bcrypt'
-import { User } from '@prisma/client'
+import { PrismaClient, User } from '@prisma/client'
+import passport from 'passport'
+import { Strategy as JWTStrategy, ExtractJwt } from 'passport-jwt'
 import { ResponseError } from '../util/errors'
-import { getPrismaClient } from '../util/prisma'
+import { classInjection, injected } from '../util/injection-decorators'
 
-const prisma = getPrismaClient()
 const SALT_ROUNDS = 10
 
-export async function getUserById(id: string, encryptedPassword?: string): Promise<User | null> {
-    const user = await prisma.user.findUnique({ where: { id } })
-    if (user && encryptedPassword && encryptedPassword !== user?.password) {
-        return null
+@classInjection
+export default class AuthService {
+
+    @injected
+    private prisma!: PrismaClient
+
+    private passport: passport.Authenticator
+
+    constructor() {
+        this.passport = new passport.Authenticator()
+        const jwtOptions = {
+            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+            secretOrKey: process.env.JWT_SECRET!
+        }
+
+        this.passport.use(new JWTStrategy(jwtOptions, async (payload, done) => {
+            try {
+                const user = await this.getUserById(payload.sub, payload.pwd)
+                return user ? done(null, user) : done(new ResponseError(401, 'Unauthorized'))
+            } catch (error) {
+                return done(new ResponseError(401, 'Unauthorized'))
+            }
+        }))
     }
-    return user
-}
 
-export async function getUserByIdOrElse404(id: string): Promise<User> {
-    const user = await getUserById(id)
-    if (!user) {
-        throw new ResponseError(404, 'User not found')
+    requireAuth() {
+        return this.passport.authenticate('jwt', { session: false, failWithError: true })
     }
-    return user
-}
 
-export async function getUserByEmail(email: string, password?: string): Promise<User | null> {
-    const user = await prisma.user.findUnique({ where: { email } })
-    if (user && password && !await bcrypt.compare(password, user?.password)) {
-        return null
+    async getUserById(id: string, encryptedPassword?: string): Promise<User | null> {
+        const user = await this.prisma.user.findUnique({ where: { id } })
+        if (user && encryptedPassword && encryptedPassword !== user?.password) {
+            return null
+        }
+        return user
     }
-    return user
-}
 
-export async function createUser(email: string, password: string): Promise<User> {
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS)
-    const user = await prisma.user.create({
-        data: { email, password: hashedPassword }
-    })
-    return user
-}
+    async getUserByIdOrElse404(id: string): Promise<User> {
+        const user = await this.getUserById(id)
+        if (!user) {
+            throw new ResponseError(404, 'User not found')
+        }
+        return user
+    }
 
-export async function updateUserVerified(id: string, isVerified: boolean): Promise<User> {
-    return await prisma.user.update({
-        where: { id },
-        data: { isVerified }
-    })
-}
+    async getUserByEmail(email: string, password?: string): Promise<User | null> {
+        const user = await this.prisma.user.findUnique({ where: { email } })
+        if (user && password && !await bcrypt.compare(password, user?.password)) {
+            return null
+        }
+        return user
+    }
 
-export async function updateUserEmail(id: string, email: string): Promise<User> {
-    return await prisma.user.update({
-        where: { id },
-        data: { email }
-    })
-}
+    async createUser(email: string, password: string): Promise<User> {
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS)
+        const user = await this.prisma.user.create({
+            data: { email, password: hashedPassword }
+        })
+        return user
+    }
 
-export async function updateUserPassword(id: string, password: string): Promise<User> {
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS)
-    return await prisma.user.update({
-        where: { id },
-        data: { password: hashedPassword }
-    })
+    async updateUserVerified(id: string, isVerified: boolean): Promise<User> {
+        return await this.prisma.user.update({
+            where: { id },
+            data: { isVerified }
+        })
+    }
+
+    async updateUserEmail(id: string, email: string): Promise<User> {
+        return await this.prisma.user.update({
+            where: { id },
+            data: { email }
+        })
+    }
+
+    async updateUserPassword(id: string, password: string): Promise<User> {
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS)
+        return await this.prisma.user.update({
+            where: { id },
+            data: { password: hashedPassword }
+        })
+    }
 }

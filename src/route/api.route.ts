@@ -1,15 +1,26 @@
-import express, { Router } from "express"
-import helloController from "../controller/hello.controller"
-import authController from "../controller/auth.controller"
-import userController from "../controller/user.controller"
-import { errorHandler } from "../middleware/errorhandler.middleware"
+import express, { Router } from 'express'
+import { errorHandler } from '../middleware/errorhandler.middleware'
+import { factoryInjection, factoryMethod, injected } from '../util/injection-decorators'
 
-const router = Router()
+class APIFactory {
 
-router.use(express.json())
-router.use('/', helloController)
-router.use('/', authController)
-router.use('/', userController)
-router.use(errorHandler)
+    @factoryMethod
+    static apiRoute(
+        @injected('helloController') helloController: Router,
+        @injected('authController') authController: Router,
+        @injected('userController') userController: Router,
+    ) {
+        const router = Router()
 
-export default router
+        router.use(express.json())
+        router.use('/', helloController)
+        router.use('/', authController)
+        router.use('/', userController)
+        router.use(errorHandler)
+
+        return router
+    }
+
+}
+
+export default factoryInjection(APIFactory)

@@ -1,8 +1,18 @@
-import express from 'express'
-import apiRoute from '../route/api.route'
+import express, { Router } from 'express'
+import { factoryInjection, factoryMethod, injected } from '../util/injection-decorators'
 
-const app = express()
+class AppFactory {
 
-app.use('/api', apiRoute)
+    @factoryMethod
+    static app(
+        @injected('apiRoute') apiRoute: Router,
+    ) {
+        const app = express()
+        app.use('/api', apiRoute)
 
-export default app
+        return app
+    }
+    
+}
+
+export default factoryInjection(AppFactory)
