@@ -7,6 +7,7 @@ import OSSService from './oss.service'
 import { asyncInitializeRoutine } from '../app/container'
 import { Logger } from 'pino'
 import { classInjection, injected } from '../util/injection-decorators'
+import { UpdateUserProfile } from '../schema/user.schema'
 
 @classInjection
 export default class UserService {
@@ -40,38 +41,63 @@ export default class UserService {
         if (currentUser.role === UserRole.ADMIN) {
             return
         }
-        if (!uuid.parse(userId).every(v => v === 0)) {
+        if (!uuid.validate(userId) || !uuid.parse(userId).every(v => v === 0)) {
             throw new ResponseError(403, 'Permission denied')
         }
     }
 
     getTargetId(currentUser: User, userId: string) {
-        return uuid.parse(userId).every(v => v === 0) ? currentUser.id : userId
+        return uuid.validate(userId) && uuid.parse(userId).every(v => v === 0) ? currentUser.id : userId
     }
 
-    async updateUserProfile(id: string, name?: string, description?: string): Promise<User> {
-        return await this.prisma.user.update({
-            where: { id },
-            data: { name, description }
-        })
-    }
-
-    async getUserAvatarLinks(id: string): Promise<{ avatar: string, thumbnail: string }> {
-        if (await this.ossService.existsObject('avatar', `${id}.webp`)) {
-            const [avatar, thumbnail] = await Promise.all([this.ossService.getObjectUrl('avatar', `${id}.webp`), this.ossService.getObjectUrl('avatar', `${id}-thumbnail.webp`)])
-            return { avatar, thumbnail }
-        } else {
-            const [avatar, thumbnail] = await Promise.all([this.ossService.getObjectUrl('avatar', `default.webp`), this.ossService.getObjectUrl('avatar', `default-thumbnail.webp`)])
-            return { avatar, thumbnail }
+    hasRoleModifyPermissionOrElse403(currentUser: User, role?: UpdateUserProfile['role']) {
+        if (currentUser.role === UserRole.ADMIN) {
+            return
+        }
+        if (role === 'admin') {
+            throw new ResponseError(403, 'Permission denied')
         }
     }
 
-    async uploadUserAvatar(id: string, buffer: Buffer): Promise<{ avatar: string, thumbnail: string }> {
-        const [avatar, thumbnail] = await Promise.all([
-            this.ossService.putObject('avatar', `${id}.webp`, sharp(buffer).toFormat('webp')),
-            this.ossService.putObject('avatar', `${id}-thumbnail.webp`, sharp(buffer).resize(128, 128).toFormat('webp'))
+    async updateUserProfile(id: string, name?: string, description?: string, role?: UpdateUserProfile['role']): Promise<User> {
+        let roleKey: UserRole | undefined
+        if (role === undefined) {
+            roleKey = undefined
+        } else if (role === 'customer') {
+            roleKey = UserRole.USER
+        } else if (role === 'rider') {
+            roleKey = UserRole.RIDER
+        } else if (role === 'merchant') {
+            roleKey = UserRole.MERCHANT
+        } else if (role === 'admin') {
+            roleKey = UserRole.ADMIN
+        } else {
+            throw new Error('Unreachable')
+        }
+        return await this.prisma.user.update({
+            where: { id },
+            data: { name, description, role: roleKey },
+        })
+    }
+
+    readonly ossContentType = 'image/webp'
+
+    async getUserAvatarLinks(id: string): Promise<{ origin: string, thumbnail: string }> {
+        if (await this.ossService.existsObject('avatar', `${id}.webp`)) {
+            const [origin, thumbnail] = await Promise.all([this.ossService.getObjectUrl('avatar', `${id}.webp`), this.ossService.getObjectUrl('avatar', `${id}-thumbnail.webp`)])
+            return { origin, thumbnail }
+        } else {
+            const [origin, thumbnail] = await Promise.all([this.ossService.getObjectUrl('avatar', `default.webp`), this.ossService.getObjectUrl('avatar', `default-thumbnail.webp`)])
+            return { origin, thumbnail }
+        }
+    }
+
+    async uploadUserAvatar(id: string, buffer: Buffer): Promise<{ origin: string, thumbnail: string }> {
+        const [origin, thumbnail] = await Promise.all([
+            this.ossService.putObject('avatar', `${id}.webp`, sharp(buffer).toFormat('webp'), this.ossContentType),
+            this.ossService.putObject('avatar', `${id}-thumbnail.webp`, sharp(buffer).resize(128, 128).toFormat('webp'), this.ossContentType)
         ])
-        return { avatar, thumbnail }
+        return { origin, thumbnail }
     }
 
     async deleteUserAvatar(id: string) {
@@ -79,6 +105,19 @@ export default class UserService {
             this.ossService.removeObject('avatar', `${id}.webp`),
             this.ossService.removeObject('avatar', `${id}-thumbnail.webp`)
         ])
+    }
+
+    getUserRole(user: User): UpdateUserProfile['role'] & string {
+        if (user.role === UserRole.USER) {
+            return 'customer'
+        } else if (user.role === UserRole.RIDER) {
+            return 'rider'
+        } else if (user.role === UserRole.MERCHANT) {
+            return 'merchant'
+        } else if (user.role === UserRole.ADMIN) {
+            return 'admin'
+        }
+        throw new Error('Unreachable')
     }
    
 }

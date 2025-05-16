@@ -24,8 +24,8 @@ export default class OSSService {
         return await this.minio.presignedGetObject(bucketName, objectName)
     }
 
-    async putObject(bucketName: string, objectName: string, buffer: stream.Readable | Buffer | string) {
-        await this.minio.putObject(bucketName, objectName, buffer)
+    async putObject(bucketName: string, objectName: string, buffer: stream.Readable | Buffer | string, contentType?: string) {
+        await this.minio.putObject(bucketName, objectName, buffer, undefined, contentType ? { 'Content-Type': contentType } : undefined)
         return await this.getObjectUrl(bucketName, objectName)
     }
 

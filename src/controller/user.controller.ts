@@ -15,18 +15,22 @@ class UserController {
         const router = Router()
 
         router.get(
-            '/user/:id/profile',
+            '/user/:id',
             authService.requireAuth(),
             validateParams(UserSchema.userProfileParams),
             async (req, res) => {
                 const { id } = req.params
                 const user = await authService.getUserByIdOrElse404(userService.getTargetId(req.user!, id))
+                const { origin, thumbnail } = await userService.getUserAvatarLinks(user.id)
 
                 res.status(200).json({
                     id: user.id,
                     email: user.email,
+                    createdAt: user.createdAt,
                     name: user.name || '',
-                    description: user.description || ''
+                    description: user.description || '',
+                    role: userService.getUserRole(user),
+                    avatar: { origin, thumbnail },
                 })
             }
         )
@@ -38,30 +42,18 @@ class UserController {
             validateBody(UserSchema.updateUserProfile),
             async (req, res) => {
                 const { id } = req.params
-                const { name, description } = req.body as UserSchema.UpdateUserProfile
+                const { name, description, role } = req.body as UserSchema.UpdateUserProfile
 
                 userService.hasModifyPermissionOrElse403(req.user!, id)
                 let user = await authService.getUserByIdOrElse404(userService.getTargetId(req.user!, id))
-                user = await userService.updateUserProfile(user.id, name, description)
+                userService.hasRoleModifyPermissionOrElse403(req.user!, role)
+                user = await userService.updateUserProfile(user.id, name, description, role)
 
                 res.status(200).json({
-                    id: user.id,
-                    email: user.email,
                     name: user.name || '',
-                    description: user.description || ''
+                    description: user.description || '',
+                    role: userService.getUserRole(user),
                 })
-            }
-        )
-
-        router.get(
-            '/user/:id/avatar',
-            authService.requireAuth(),
-            validateParams(UserSchema.userProfileParams),
-            async (req, res) => {
-                const { id } = req.params
-                const user = await authService.getUserByIdOrElse404(userService.getTargetId(req.user!, id))
-                
-                res.status(200).json(await userService.getUserAvatarLinks(user.id))
             }
         )
 
@@ -78,9 +70,9 @@ class UserController {
                 const { id } = req.params
                 userService.hasModifyPermissionOrElse403(req.user!, id)
                 const user = await authService.getUserByIdOrElse404(userService.getTargetId(req.user!, id))
-                const { avatar, thumbnail } = await userService.uploadUserAvatar(user.id, req.file!.buffer)
+                const { origin, thumbnail } = await userService.uploadUserAvatar(user.id, req.file!.buffer)
 
-                res.status(200).json({ avatar, thumbnail })
+                res.status(200).json({ origin, thumbnail })
             }
         )
 
