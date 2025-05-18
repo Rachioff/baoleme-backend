@@ -63,3 +63,30 @@ ssh -L 5432:localhost:5432 user@your-server-ip
 Host: localhost
 Port: 5432
 ```
+
+## MinIO 使用
+[MinIO SDK Document](https://min.io/docs/minio/linux/developers/minio-drivers.html#javascript-sdk)
+```bash
+npm install --save-dev @types/minio
+```
+然后就开始导入，调用SDK
+
+浪费昨晚2小时鼓捣，原来是冲突导致容器中的nginx没有正确监听端口
+
+443 端口冲突，主机有运行nginx
+
+分析：容器内可以正常通讯，但是在主机内不能访问代理路径——所以是nginx没有正常工作——配置有问题，没有生效——检查系统网络
+```bash
+docker exec home_nginx_1 nginx -t 
+sudo lsof -i :80
+sudo systemctl stop nginx 
+curl http://localhost:8080/minio/
+
+docker-compose down  
+docker-compose up -d
+
+curl ifconfig.me 
+182.92.239.175#
+```
+
+服务端网络配置正确，curl反应合理。但是连接超时——应该是OS防火墙和云服务商端口开放的原因
