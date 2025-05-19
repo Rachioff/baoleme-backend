@@ -7,11 +7,15 @@ export const userProfileParams = Joi.object({
 export const updateUserProfile = Joi.object({
     name: Joi.string().optional(),
     description: Joi.string().optional(),
-    role: Joi.string().valid('customer', 'rider', 'merchant', 'admin').optional()
+    role: Joi.string().valid('customer', 'rider', 'merchant', 'admin').optional(),
+    emailVisible: Joi.boolean().optional(),
+    createdAtVisible: Joi.boolean().optional(),
 }).required()
 
 export interface UpdateUserProfile {
-    name?: string;
-    description?: string;
+    name?: string
+    description?: string
     role?: 'customer' | 'rider' | 'merchant' | 'admin'
+    emailVisible?: boolean
+    createdAtVisible?: boolean
 }
