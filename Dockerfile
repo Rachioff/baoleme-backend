@@ -1,30 +1,17 @@
-# step1: build
-FROM node:22.14.0 AS builder
-
-ENV NODE_ENV=development
+FROM node:22.14.0
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install --production=false
+RUN npm install -D
 
 COPY . .
 
-RUN npm run build
+RUN npx prisma generate
 
-# step2: run
-FROM node:22.14.0
+RUN npx tsc -p .
 
-WORKDIR /app
+EXPOSE 3000
 
-COPY --from=builder /app/out ./out
-
-COPY --from=builder /app/package*.json ./
-
-RUN npm install --production
-
-EXPOSE 9229
-
-CMD ["npm", "start"]
-
+CMD npx prisma migrate deploy && node .
