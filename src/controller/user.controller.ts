@@ -25,11 +25,13 @@ class UserController {
 
                 res.status(200).json({
                     id: user.id,
-                    email: user.email,
-                    createdAt: user.createdAt,
+                    email: userService.isEmailVisibleTo(req.user!, user) ? user.email : undefined,
+                    createdAt: userService.isCreatedAtVisibleTo(req.user!, user) ? user.createdAt : undefined,
                     name: user.name || '',
                     description: user.description || '',
                     role: userService.getUserRole(user),
+                    emailVisible: user.emailVisible,
+                    createdAtVisible: user.createdAtVisible,
                     avatar: { origin, thumbnail },
                 })
             }
@@ -42,17 +44,19 @@ class UserController {
             validateBody(UserSchema.updateUserProfile),
             async (req, res) => {
                 const { id } = req.params
-                const { name, description, role } = req.body as UserSchema.UpdateUserProfile
+                const { name, description, role, emailVisible, createdAtVisible } = req.body as UserSchema.UpdateUserProfile
 
                 userService.hasModifyPermissionOrElse403(req.user!, id)
                 let user = await authService.getUserByIdOrElse404(userService.getTargetId(req.user!, id))
                 userService.hasRoleModifyPermissionOrElse403(req.user!, role)
-                user = await userService.updateUserProfile(user.id, name, description, role)
+                user = await userService.updateUserProfile(user.id, name, description, role, emailVisible, createdAtVisible)
 
                 res.status(200).json({
                     name: user.name || '',
                     description: user.description || '',
                     role: userService.getUserRole(user),
+                    emailVisible: user.emailVisible,
+                    createdAtVisible: user.createdAtVisible,
                 })
             }
         )

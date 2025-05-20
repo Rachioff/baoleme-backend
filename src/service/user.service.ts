@@ -59,7 +59,7 @@ export default class UserService {
         }
     }
 
-    async updateUserProfile(id: string, name?: string, description?: string, role?: UpdateUserProfile['role']): Promise<User> {
+    async updateUserProfile(id: string, name?: string, description?: string, role?: UpdateUserProfile['role'], emailVisible?: boolean, createdAtVisible?: boolean): Promise<User> {
         let roleKey: UserRole | undefined
         if (role === undefined) {
             roleKey = undefined
@@ -76,7 +76,7 @@ export default class UserService {
         }
         return await this.prisma.user.update({
             where: { id },
-            data: { name, description, role: roleKey },
+            data: { name, description, role: roleKey, emailVisible, createdAtVisible },
         })
     }
 
@@ -118,6 +118,14 @@ export default class UserService {
             return 'admin'
         }
         throw new Error('Unreachable')
+    }
+
+    isEmailVisibleTo(currentUser: User, user: User) {
+        return currentUser.role === UserRole.ADMIN || currentUser.id === user.id || user.emailVisible
+    }
+
+    isCreatedAtVisibleTo(currentUser: User, user: User) {
+        return currentUser.role === UserRole.ADMIN || currentUser.id === user.id || user.createdAtVisible
     }
    
 }
