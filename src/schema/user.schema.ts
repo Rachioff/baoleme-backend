@@ -5,8 +5,8 @@ export const userProfileParams = Joi.object({
 }).required()
 
 export const updateUserProfile = Joi.object({
-    name: Joi.string().optional(),
-    description: Joi.string().optional(),
+    name: Joi.string().allow('').optional(),
+    description: Joi.string().allow('').optional(),
     role: Joi.string().valid('customer', 'rider', 'merchant', 'admin').optional(),
     emailVisible: Joi.boolean().optional(),
     createdAtVisible: Joi.boolean().optional(),
