@@ -127,5 +127,14 @@ export default class UserService {
     isCreatedAtVisibleTo(currentUser: User, user: User) {
         return currentUser.role === UserRole.ADMIN || currentUser.id === user.id || user.createdAtVisible
     }
+
+    requireAdmin() {
+        return (req: any, res: any, next: any) => {
+            if (req.user?.role !== UserRole.ADMIN) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            next()
+        }
+    }
    
 }
