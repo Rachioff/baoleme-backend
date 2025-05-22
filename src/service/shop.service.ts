@@ -58,10 +58,15 @@ export default class ShopService {
     }
 
     async getShopsByOwnerId(ownerId: string) {
-        return await this.prisma.shop.findMany({
-            include: { categories: true, address: true },
-            where: { ownerId },
-            orderBy: { createdAt: 'desc' },
+        return await this.prisma.$transaction(async tx => {
+            if (!await tx.user.findUnique({ where: { id: ownerId } })) {
+                throw new ResponseError(404, 'User not found')
+            }
+            return await tx.shop.findMany({
+                include: { categories: true, address: true },
+                where: { ownerId },
+                orderBy: { createdAt: 'desc' },
+            })
         })
     }
 
@@ -119,48 +124,51 @@ export default class ShopService {
         }
     }
 
-    async getShopCategoryOrElse404(id: string) {
-        const category = await this.prisma.shopCategory.findUnique({ where: { id } })
-        if (!category) {
-            throw new ResponseError(404, 'Shop category not found')
-        }
-        return category
-    }
-
     async createShop(userId: string, request: CreateShop) {
         const { name, description, categories, address, opened, openTimeStart, openTimeEnd, deliveryThreshold, deliveryPrice, maximumDistance } = request
-        const shop = await this.prisma.shop.create({
-            data: {
-                name,
-                description,
-                ownerId: userId,
-                opened,
-                openTimeStart,
-                openTimeEnd,
-                deliveryThreshold,
-                deliveryPrice,
-                maximumDistance,
-                categories: { connect: categories.map(id => ({ id })) },
-                address: {
-                    create: {
-                        latitude: address.coordinate[0],
-                        longitude: address.coordinate[1],
-                        province: address.province,
-                        city: address.city,
-                        district: address.district,
-                        town: address.town,
-                        address: address.address,
-                        name: address.name,
-                        tel: address.tel
-                    }
+        return await this.prisma.$transaction(async tx => {
+            const user = await tx.user.findUnique({ where: { id: userId } })
+            if (!user) {
+                throw new ResponseError(401, 'Unauthorized')
+            }
+            await Promise.all(request.categories.map(async id => {
+                const category = await tx.shopCategory.findUnique({ where: { id } })
+                if (!category) {
+                    throw new ResponseError(404, 'Shop category not found')
                 }
-            },
-            include: { categories: true, address: true }
+            }))
+            return await tx.shop.create({
+                data: {
+                    name,
+                    description,
+                    ownerId: userId,
+                    opened,
+                    openTimeStart,
+                    openTimeEnd,
+                    deliveryThreshold,
+                    deliveryPrice,
+                    maximumDistance,
+                    categories: { connect: categories.map(id => ({ id })) },
+                    address: {
+                        create: {
+                            latitude: address.coordinate[0],
+                            longitude: address.coordinate[1],
+                            province: address.province,
+                            city: address.city,
+                            district: address.district,
+                            town: address.town,
+                            address: address.address,
+                            name: address.name,
+                            tel: address.tel
+                        }
+                    }
+                },
+                include: { categories: true, address: true }
+            })
         })
-        return shop
     }
 
-    async getShopOrElse404(id: string) {
+    async getShop(id: string) {
         const shop = await this.prisma.shop.findUnique({
             where: { id },
             include: { categories: true, address: true }
@@ -171,68 +179,99 @@ export default class ShopService {
         return shop
     }
 
-    hasShopModifyPermissionOrElse403(user: User, shop: Shop) {
-        if (user.role === 'ADMIN') {
-            return
-        }
-        if (shop.ownerId !== user.id) {
-            throw new ResponseError(403, 'Permission denied')
-        }
-    }
-
-    async checkShopDeletableOrElse409(shop: Shop) {
-        // TODO check if the shop has any unfinished orders
-    }
-
-    async deleteShop(id: string) {
-        await this.prisma.shop.delete({ where: { id } })
-        await Promise.all([
-            this.ossService.removeObject('shop', `${id}-cover.webp`),
-            this.ossService.removeObject('shop', `${id}-cover-thumbnail.webp`),
-            this.ossService.removeObject('shop', `${id}-detail.webp`),
-            this.ossService.removeObject('shop', `${id}-detail-thumbnail.webp`),
-            this.ossService.removeObject('shop', `${id}-license.webp`),
-            this.ossService.removeObject('shop', `${id}-license-thumbnail.webp`),
-        ])
-    }
-
-    async updateShopProfile(id: string, request: UpdateShopProfile) {
-        const { name, description, categories, address, verified, opened, openTimeStart, openTimeEnd, deliveryThreshold, deliveryPrice, maximumDistance } = request
-        const shop = await this.prisma.shop.update({
-            where: { id },
-            data: {
-                name,
-                description,
-                categories: { set: categories?.map(id => ({ id })) },
-                address: {
-                    update: {
-                        latitude: address?.coordinate?.[0],
-                        longitude: address?.coordinate?.[1],
-                        province: address?.province,
-                        city: address?.city,
-                        district: address?.district,
-                        town: address?.town,
-                        address: address?.address,
-                        name: address?.name,
-                        tel: address?.tel
-                    }
-                },
-                verified,
-                opened,
-                openTimeStart,
-                openTimeEnd,
-                deliveryThreshold,
-                deliveryPrice,
-                maximumDistance
-            },
-            include: { categories: true, address: true }
+    async deleteShop(currentUserId: string, id: string) {
+        await this.prisma.$transaction(async tx => {
+            const shop = await tx.shop.findUnique({ where: { id } })
+            if (!shop) {
+                throw new ResponseError(404, 'Shop not found')
+            }
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== shop.ownerId)) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            if (/* TODO check if the shop has any unfinished orders) */ false) {
+                throw new ResponseError(409, 'Shop status conflicts')
+            }
+            await tx.shop.delete({ where: { id } })
+            await Promise.all([
+                this.ossService.removeObject('shop', `${id}-cover.webp`),
+                this.ossService.removeObject('shop', `${id}-cover-thumbnail.webp`),
+                this.ossService.removeObject('shop', `${id}-detail.webp`),
+                this.ossService.removeObject('shop', `${id}-detail-thumbnail.webp`),
+                this.ossService.removeObject('shop', `${id}-license.webp`),
+                this.ossService.removeObject('shop', `${id}-license-thumbnail.webp`),
+            ])
         })
-        return shop
+    }
+
+    async updateShopProfile(currentUserId: string, id: string, request: UpdateShopProfile) {
+        const { name, description, categories, address, opened, openTimeStart, openTimeEnd, deliveryThreshold, deliveryPrice, maximumDistance } = request
+        let verified: boolean | undefined = request.verified
+        return await this.prisma.$transaction(async tx => {
+            const shop = await tx.shop.findUnique({ where: { id } })
+            if (!shop) {
+                throw new ResponseError(404, 'Shop not found')
+            }
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== shop.ownerId)) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            if (categories) {
+                await Promise.all(categories.map(async id => {
+                    const category = await tx.shopCategory.findUnique({ where: { id } })
+                    if (!category) {
+                        throw new ResponseError(404, 'Shop category not found')
+                    }
+                }))
+            }
+            if (currentUser.role !== 'ADMIN') {
+                verified = undefined
+            }
+            return await tx.shop.update({
+                where: { id },
+                data: {
+                    name,
+                    description,
+                    categories: { set: categories?.map(id => ({ id })) },
+                    address: {
+                        update: {
+                            latitude: address?.coordinate?.[0],
+                            longitude: address?.coordinate?.[1],
+                            province: address?.province,
+                            city: address?.city,
+                            district: address?.district,
+                            town: address?.town,
+                            address: address?.address,
+                            name: address?.name,
+                            tel: address?.tel
+                        }
+                    },
+                    verified,
+                    opened,
+                    openTimeStart,
+                    openTimeEnd,
+                    deliveryThreshold,
+                    deliveryPrice,
+                    maximumDistance
+                },
+                include: { categories: true, address: true }
+            })
+        })
     }
 
     readonly ossContentType = 'image/webp'
 
-    async updateShopImage(id: string, cover: Buffer | undefined, detail: Buffer | undefined, license: Buffer | undefined) {
+    async updateShopImage(currentUserId: string, id: string, cover: Buffer | undefined, detail: Buffer | undefined, license: Buffer | undefined) {
+        await this.prisma.$transaction(async tx => {
+            const shop = await tx.shop.findUnique({ where: { id } })
+            if (!shop) {
+                throw new ResponseError(404, 'Shop not found')
+            }
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== shop.ownerId)) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+        })
         const tasks = []
         if (cover) {
             tasks.push(
@@ -252,12 +291,25 @@ export default class ShopService {
         await Promise.all(tasks)
     }
 
-    async updateShopOwner(id: string, ownerId: string) {
-        const shop = await this.prisma.shop.update({
-            where: { id },
-            data: { ownerId }
+    async updateShopOwner(currentUserId: string, id: string, ownerId: string) {
+        await this.prisma.$transaction(async tx => {
+            const shop = await tx.shop.findUnique({ where: { id } })
+            if (!shop) {
+                throw new ResponseError(404, 'Shop not found')
+            }
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== shop.ownerId)) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const owner = await tx.user.findUnique({ where: { id: ownerId } })
+            if (!owner) {
+                throw new ResponseError(404, 'User not found')
+            }
+            await tx.shop.update({
+                where: { id },
+                data: { ownerId }
+            })
         })
-        return shop
     }
 
 }

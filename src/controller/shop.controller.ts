@@ -7,7 +7,6 @@ import { acceptMaximumSize, acceptMimeTypes, validateBody, validateImage, valida
 import UserService from "../service/user.service";
 import ShopService from "../service/shop.service";
 import upload from "../middleware/upload.middleware";
-import { PrismaClient } from "@prisma/client";
 
 class ShopController {
 
@@ -42,8 +41,7 @@ class ShopController {
             validateParams(UserSchema.userProfileParams),
             async (req, res) => {
                 const { id } = req.params
-                const user = await authService.getUserByIdOrElse404(id)
-                const shops = await shopService.getShopsByOwnerId(user.id)
+                const shops = await shopService.getShopsByOwnerId(id)
                 res.status(200).json(await Promise.all(shops.map(async shop => shopService.shopDataToFullShopInfo(shop))))
             }
         )
@@ -54,9 +52,7 @@ class ShopController {
             validateBody(ShopSchema.createShop),
             async (req, res) => {
                 const request = req.body as ShopSchema.CreateShop
-                const user = req.user!
-                await Promise.all(request.categories.map(async category => shopService.getShopCategoryOrElse404(category)))
-                const shop = await shopService.createShop(user.id, request)
+                const shop = await shopService.createShop(req.user!.id, request)
                 res.status(201).json(await shopService.shopDataToFullShopInfo(shop))
             }
         )
@@ -67,7 +63,7 @@ class ShopController {
             validateParams(ShopSchema.shopIdParams),
             async (req, res) => {
                 const { id } = req.params
-                const shop = await shopService.getShopOrElse404(id)
+                const shop = await shopService.getShop(id)
                 res.status(200).json(await shopService.shopDataToFullShopInfo(shop))
             }
         )
@@ -78,11 +74,7 @@ class ShopController {
             validateParams(ShopSchema.shopIdParams),
             async (req, res) => {
                 const { id } = req.params
-                const user = req.user!
-                const shop = await shopService.getShopOrElse404(id)
-                shopService.hasShopModifyPermissionOrElse403(user, shop)
-                await shopService.checkShopDeletableOrElse409(shop)
-                await shopService.deleteShop(id)
+                await shopService.deleteShop(req.user!.id, id)
                 res.status(204).send()
             }
         )
@@ -95,16 +87,7 @@ class ShopController {
             async (req, res) => {
                 const { id } = req.params
                 let request = req.body as ShopSchema.UpdateShopProfile
-                const user = req.user!
-                const shop = await shopService.getShopOrElse404(id)
-                shopService.hasShopModifyPermissionOrElse403(user, shop)
-                if (request.categories) {
-                    await Promise.all(request.categories.map(async category => shopService.getShopCategoryOrElse404(category)))
-                }
-                if (user.role !== 'ADMIN') {
-                    request.verified = undefined
-                }
-                const updatedShop = await shopService.updateShopProfile(shop.id, request)
+                const updatedShop = await shopService.updateShopProfile(req.user!.id, id, request)
                 res.status(200).json(shopService.shopDataToShopProfile(updatedShop))
             }
         )
@@ -132,16 +115,13 @@ class ShopController {
             validateImage(),
             async (req, res) => {
                 const { id } = req.params
-                const user = req.user!
-                const shop = await shopService.getShopOrElse404(id)
-                shopService.hasShopModifyPermissionOrElse403(user, shop)
                 const { cover, detailImage, license } = req.files as {
                     cover?: Express.Multer.File[]
                     detailImage?: Express.Multer.File[]
                     license?: Express.Multer.File[]
                 }
-                await shopService.updateShopImage(shop.id, cover?.[0].buffer, detailImage?.[0].buffer, license?.[0].buffer)
-                res.status(200).json(await shopService.getShopImageLinks(shop.id))
+                await shopService.updateShopImage(req.user!.id, id, cover?.[0].buffer, detailImage?.[0].buffer, license?.[0].buffer)
+                res.status(200).json(await shopService.getShopImageLinks(id))
             }
         )
 
@@ -153,12 +133,8 @@ class ShopController {
             async (req, res) => {
                 const { id } = req.params
                 const { owner } = req.body as ShopSchema.UpdateShopOwner
-                const user = req.user!
-                const shop = await shopService.getShopOrElse404(id)
-                shopService.hasShopModifyPermissionOrElse403(user, shop)
-                const newOwner = await authService.getUserByIdOrElse404(owner)
-                await shopService.updateShopOwner(shop.id, newOwner.id)
-                res.status(200).json(await shopService.shopDataToFullShopInfo(shop))
+                await shopService.updateShopOwner(req.user!.id, id, owner)
+                res.status(204).send()
             }
         )
 
