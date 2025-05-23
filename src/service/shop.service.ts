@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient, Shop, User } from "@prisma/client";
+import { Prisma, PrismaClient, Shop, ShopCategory, User } from "@prisma/client";
 import { classInjection, injected } from "../util/injection-decorators";
 import { asyncInitializeRoutine } from "../app/container";
 import { Logger } from "pino";
@@ -34,26 +34,32 @@ export default class ShopService {
         })
     }
 
-    async getFilteredGlobalShops(pageSkip: number, pageLimit: number, filterKeywords: string[], minCreatedAt?: Date, maxCreatedAt?: Date) {
-        return await this.prisma.shop.findMany({
-            include: { categories: true, address: true },
-            where: {
-                AND: [
-                    {
-                        OR: filterKeywords.map(keyword => ({
-                            name: {
-                                contains: keyword,
-                                mode: 'insensitive' as Prisma.QueryMode
-                            }
-                        }))
-                    },
-                    { createdAt: { gte: minCreatedAt } },
-                    { createdAt: { lte: maxCreatedAt } }
-                ]
-            },
-            skip: pageSkip,
-            take: pageLimit,
-            orderBy: { createdAt: 'desc' },
+    async getFilteredGlobalShops(currentUserId: string, pageSkip: number, pageLimit: number, filterKeywords: string[], minCreatedAt?: Date, maxCreatedAt?: Date) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            return await tx.shop.findMany({
+                include: { categories: true, address: true },
+                where: {
+                    AND: [
+                        {
+                            OR: filterKeywords.map(keyword => ({
+                                name: {
+                                    contains: keyword,
+                                    mode: 'insensitive' as Prisma.QueryMode
+                                }
+                            }))
+                        },
+                        { createdAt: { gte: minCreatedAt } },
+                        { createdAt: { lte: maxCreatedAt } }
+                    ]
+                },
+                skip: pageSkip,
+                take: pageLimit,
+                orderBy: { createdAt: 'desc' },
+            })
         })
     }
 
@@ -309,6 +315,137 @@ export default class ShopService {
                 where: { id },
                 data: { ownerId }
             })
+        })
+    }
+
+    shopCategoryDataToShopCategoryInfo(shopCategory: ShopCategory) {
+        return {
+            id: shopCategory.id,
+            name: shopCategory.name,
+        }
+    }
+
+    async getShopCategories() {
+        return await this.prisma.shopCategory.findMany({
+            orderBy: { order: 'asc' }
+        })
+    }
+
+    async addShopCategory(currentUserId: string, name: string) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const maxOrder = (await tx.shopCategory.aggregate({
+                _max: { order: true }
+            }))._max.order
+            return await tx.shopCategory.create({
+                data: {
+                    name,
+                    order: (maxOrder ?? -1) + 1
+                }
+            })
+        })
+    }
+
+    async getShopCategory(id: string) {
+        const category = await this.prisma.shopCategory.findUnique({
+            where: { id }
+        })
+        if (!category) {
+            throw new ResponseError(404, 'Shop category not found')
+        }
+        return category
+    }
+
+    async updateShopCategory(currentUserId: string, id: string, name: string) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const category = await tx.shopCategory.findUnique({ where: { id } })
+            if (!category) {
+                throw new ResponseError(404, 'Shop category not found')
+            }
+            return await tx.shopCategory.update({
+                where: { id },
+                data: { name }
+            })
+        })
+    }
+
+    async updateShopCategoryPos(currentUserId: string, id: string, before: string | null) {
+        await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const category = await tx.shopCategory.findUnique({ where: { id } })
+            if (!category) {
+                throw new ResponseError(404, 'Shop category not found')
+            }
+            if (before) {
+                const beforeCategory = await tx.shopCategory.findUnique({ where: { id: before } })
+                if (!beforeCategory) {
+                    throw new ResponseError(404, 'Shop category not found')
+                }
+                if (category.order === beforeCategory.order) {
+                    return
+                }
+                if (category.order < beforeCategory.order) {
+                    await tx.shopCategory.updateMany({
+                        where: {
+                            order: { gt: category.order, lt: beforeCategory.order }
+                        },
+                        data: { order: { increment: -1 } }
+                    })
+                    await tx.shopCategory.update({
+                        where: { id },
+                        data: { order: beforeCategory.order - 1 }
+                    })
+                } else {
+                    await tx.shopCategory.updateMany({
+                        where: {
+                            order: { lt: category.order, gte: beforeCategory.order }
+                        },
+                        data: { order: { increment: 1 } }
+                    })
+                    await tx.shopCategory.update({
+                        where: { id },
+                        data: { order: beforeCategory.order }
+                    })
+                }
+            } else {
+                const maxOrder = (await tx.shopCategory.aggregate({
+                    _max: { order: true }
+                }))._max.order!
+                await tx.shopCategory.updateMany({
+                    where: {
+                        order: { gt: category.order }
+                    },
+                    data: { order: { increment: -1 } }
+                })
+                await tx.shopCategory.update({
+                    where: { id },
+                    data: { order: maxOrder }
+                })
+            }
+        })
+    }
+
+    async deleteShopCategory(currentUserId: string, id: string) {
+        await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const category = await tx.shopCategory.findUnique({ where: { id } })
+            if (!category) {
+                throw new ResponseError(404, 'Shop category not found')
+            }
+            await tx.shopCategory.delete({ where: { id } })
         })
     }
 

@@ -21,7 +21,6 @@ class ShopController {
         router.get(
             '/shops',
             authService.requireAuth(),
-            userService.requireAdmin(),
             validateQuery(ShopSchema.getShopsQuery),
             async (req, res) => {
                 const { p, pn, q, min_ca, max_ca } = req.query as unknown as ShopSchema.GetShopsQuery
@@ -30,7 +29,7 @@ class ShopController {
                 const filterKeywords = q.split(' ').filter(s => s.length > 0)
                 const minCreatedAt = min_ca ? new Date(min_ca) : undefined
                 const maxCreatedAt = max_ca ? new Date(max_ca) : undefined
-                const shops = await shopService.getFilteredGlobalShops(pageSkip, pageLimit, filterKeywords, minCreatedAt, maxCreatedAt)
+                const shops = await shopService.getFilteredGlobalShops(req.user!.id, pageSkip, pageLimit, filterKeywords, minCreatedAt, maxCreatedAt)
                 res.status(200).json(await Promise.all(shops.map(async shop => shopService.shopDataToFullShopInfo(shop))))
             }
         )

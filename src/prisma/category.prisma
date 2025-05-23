@@ -1,6 +1,7 @@
 model ShopCategory {
     id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
     name        String
+    order       Int
 
     shops       Shop[]
 }
