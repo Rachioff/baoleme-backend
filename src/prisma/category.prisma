@@ -12,5 +12,5 @@ model ItemCategory {
     order   Int
     
     shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
-    shopId  String
+    shopId  String  @db.Uuid
 }

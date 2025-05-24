@@ -1,7 +1,8 @@
 import { ItemCategory, PrismaClient } from "@prisma/client";
-import { injected } from "../util/injection-decorators";
+import { classInjection, injected } from "../util/injection-decorators";
 import { ResponseError } from "../util/errors";
 
+@classInjection
 export default class ItemService {
 
     @injected
@@ -40,7 +41,7 @@ export default class ItemService {
             if (!shop) {
                 throw new ResponseError(404, 'Shop not found')
             }
-            if (!currentUser || currentUser.id !== shop.ownerId || currentUser.role !== 'ADMIN') {
+            if (!currentUser || (currentUser.id !== shop.ownerId && currentUser.role !== 'ADMIN')) {
                 throw new ResponseError(403, 'Permission denied')
             }
             const maxOrder = (await tx.itemCategory.aggregate({
@@ -89,7 +90,7 @@ export default class ItemService {
             if (!shop) {
                 throw new ResponseError(404, 'Shop not found')
             }
-            if (!currentUser || currentUser.id !== shop.ownerId || currentUser.role !== 'ADMIN') {
+            if (!currentUser || (currentUser.id !== shop.ownerId && currentUser.role !== 'ADMIN')) {
                 throw new ResponseError(403, 'Permission denied')
             }
             const category = await tx.itemCategory.findUnique({
@@ -115,7 +116,7 @@ export default class ItemService {
             if (!shop) {
                 throw new ResponseError(404, 'Shop not found')
             }
-            if (!currentUser || currentUser.id !== shop.ownerId || currentUser.role !== 'ADMIN') {
+            if (!currentUser || (currentUser.id !== shop.ownerId && currentUser.role !== 'ADMIN')) {
                 throw new ResponseError(403, 'Permission denied')
             }
             const category = await tx.itemCategory.findUnique({ 
@@ -191,7 +192,7 @@ export default class ItemService {
             if (!shop) {
                 throw new ResponseError(404, 'Shop not found')
             }
-            if (!currentUser || currentUser.id !== shop.ownerId || currentUser.role !== 'ADMIN') {
+            if (!currentUser || (currentUser.id !== shop.ownerId && currentUser.role !== 'ADMIN')) {
                 throw new ResponseError(403, 'Permission denied')
             }
             const category = await tx.itemCategory.findUnique({

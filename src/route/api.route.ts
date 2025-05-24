@@ -11,6 +11,7 @@ class APIFactory {
         @injected('userController') userController: Router,
         @injected('shopController') shopController: Router,
         @injected('shopCategoryController') shopCategoryController: Router,
+        @injected('itemCategoryController') itemCategoryController: Router
     ) {
         const router = Router()
 
@@ -20,6 +21,7 @@ class APIFactory {
         router.use('/', userController)
         router.use('/', shopController)
         router.use('/', shopCategoryController)
+        router.use('/', itemCategoryController)
         router.use(errorHandler)
 
         return router
