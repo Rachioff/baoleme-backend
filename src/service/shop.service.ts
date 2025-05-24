@@ -339,11 +339,11 @@ export default class ShopService {
             }
             const maxOrder = (await tx.shopCategory.aggregate({
                 _max: { order: true }
-            }))._max.order
+            }))._max.order ?? -1
             return await tx.shopCategory.create({
                 data: {
                     name,
-                    order: (maxOrder ?? -1) + 1
+                    order: maxOrder + 1
                 }
             })
         })

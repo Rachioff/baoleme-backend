@@ -13,7 +13,6 @@ class ShopController {
     @factoryMethod
     static shopController(
         @injected('authService') authService: AuthService,
-        @injected('userService') userService: UserService,
         @injected('shopService') shopService: ShopService,
     ) {
         const router = Router()

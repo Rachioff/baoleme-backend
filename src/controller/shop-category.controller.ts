@@ -2,7 +2,6 @@ import { Router } from "express";
 import { factoryInjection, factoryMethod, injected } from "../util/injection-decorators";
 import AuthService from "../service/auth.service";
 import ShopService from "../service/shop.service";
-import UserService from "../service/user.service";
 import * as ShopCategorySchema from "../schema/shop-category.schema";
 import { validateBody, validateParams } from "../middleware/validator.middleware";
 
