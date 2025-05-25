@@ -41,7 +41,7 @@ export default class ShopService {
                 throw new ResponseError(403, 'Permission denied')
             }
             return await tx.shop.findMany({
-                include: { categories: true, address: true },
+                include: { categories: true },
                 where: {
                     AND: [
                         {
@@ -69,7 +69,7 @@ export default class ShopService {
                 throw new ResponseError(404, 'User not found')
             }
             return await tx.shop.findMany({
-                include: { categories: true, address: true },
+                include: { categories: true },
                 where: { ownerId },
                 orderBy: { createdAt: 'desc' },
             })
@@ -92,7 +92,7 @@ export default class ShopService {
         }
     }
 
-    async shopDataToFullShopInfo(shop: Prisma.ShopGetPayload<{ include: { categories: true, address: true } }>) {
+    async shopDataToFullShopInfo(shop: Prisma.ShopGetPayload<{ include: { categories: true } }>) {
         return {
             id: shop.id,
             owner: shop.ownerId,
@@ -105,20 +105,20 @@ export default class ShopService {
         }
     }
 
-    shopDataToShopProfile(shop: Prisma.ShopGetPayload<{ include: { categories: true, address: true } }>) {
+    shopDataToShopProfile(shop: Prisma.ShopGetPayload<{ include: { categories: true } }>) {
         return {
             name: shop.name,
             description: shop.description,
             categories: shop.categories.map(category => category.id),
             address: {
-                coordinate: [shop.address?.latitude, shop.address?.longitude],
-                province: shop.address?.province,
-                city: shop.address?.city,
-                district: shop.address?.district,
-                town: shop.address?.town,
-                address: shop.address?.address,
-                name: shop.address?.name,
-                tel: shop.address?.tel,
+                coordinate: [shop.addressLatitude, shop.addressLongitude],
+                province: shop.addressProvince,
+                city: shop.addressCity,
+                district: shop.addressDistrict,
+                town: shop.addressTown,
+                address: shop.addressAddress,
+                name: shop.addressName,
+                tel: shop.addressTel,
             },
             verified: shop.verified,
             opened: shop.opened,
@@ -155,21 +155,17 @@ export default class ShopService {
                     deliveryPrice,
                     maximumDistance,
                     categories: { connect: categories.map(id => ({ id })) },
-                    address: {
-                        create: {
-                            latitude: address.coordinate[0],
-                            longitude: address.coordinate[1],
-                            province: address.province,
-                            city: address.city,
-                            district: address.district,
-                            town: address.town,
-                            address: address.address,
-                            name: address.name,
-                            tel: address.tel
-                        }
-                    }
+                    addressLatitude: address.coordinate[0],
+                    addressLongitude: address.coordinate[1],
+                    addressProvince: address.province,
+                    addressCity: address.city,
+                    addressDistrict: address.district,
+                    addressTown: address.town,
+                    addressAddress: address.address,
+                    addressName: address.name,
+                    addressTel: address.tel
                 },
-                include: { categories: true, address: true }
+                include: { categories: true }
             })
         })
     }
@@ -177,7 +173,7 @@ export default class ShopService {
     async getShop(id: string) {
         const shop = await this.prisma.shop.findUnique({
             where: { id },
-            include: { categories: true, address: true }
+            include: { categories: true }
         })
         if (!shop) {
             throw new ResponseError(404, 'Shop not found')
@@ -239,19 +235,15 @@ export default class ShopService {
                     name,
                     description,
                     categories: { set: categories?.map(id => ({ id })) },
-                    address: {
-                        update: {
-                            latitude: address?.coordinate?.[0],
-                            longitude: address?.coordinate?.[1],
-                            province: address?.province,
-                            city: address?.city,
-                            district: address?.district,
-                            town: address?.town,
-                            address: address?.address,
-                            name: address?.name,
-                            tel: address?.tel
-                        }
-                    },
+                    addressLatitude: address?.coordinate?.[0],
+                    addressLongitude: address?.coordinate?.[1],
+                    addressProvince: address?.province,
+                    addressCity: address?.city,
+                    addressDistrict: address?.district,
+                    addressTown: address?.town,
+                    addressAddress: address?.address,
+                    addressName: address?.name,
+                    addressTel: address?.tel,
                     verified,
                     opened,
                     openTimeStart,
@@ -260,7 +252,7 @@ export default class ShopService {
                     deliveryPrice,
                     maximumDistance
                 },
-                include: { categories: true, address: true }
+                include: { categories: true }
             })
         })
     }
