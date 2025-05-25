@@ -1,9 +1,9 @@
 {
   "name": "ruangongdazuoye-backend",
   "version": "1.0.0",
-  "main": "out/index.js",
+  "main": "out/src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:unit": "npx jest --rootDir=test/unit",
     "build": "npx prisma generate && npx tsc -p .",
     "start": "npm run build && node ."
   },
@@ -47,7 +47,8 @@
     "jest": "^29.7.0",
     "prisma": "^6.7.0",
     "supertest": "^7.1.0",
-    "ts-jest": "^29.3.2",
+    "ts-jest": "^29.3.4",
+    "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   },
   "prisma": {

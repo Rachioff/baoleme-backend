@@ -1,5 +1,4 @@
 # 合并到 dev 分支时执行检查
-# 当前只进行是否能通过编译的检查
 
 name: dev merge check
 
@@ -30,3 +29,4 @@ jobs:
 
     - run: npm ci
     - run: npm run build
+    - run: npm run test:unit
