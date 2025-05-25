@@ -1,7 +1,5 @@
 import { Prisma, PrismaClient, Shop, ShopCategory, User } from "@prisma/client";
 import { classInjection, injected } from "../util/injection-decorators";
-import { asyncInitializeRoutine } from "../app/container";
-import { Logger } from "pino";
 import OSSService from "./oss.service";
 import { CreateShop, UpdateShopProfile } from "../schema/shop.schema";
 import { ResponseError } from "../util/errors";
@@ -10,29 +8,11 @@ import sharp from "sharp";
 @classInjection
 export default class ShopService {
 
-    @injected('logger', true)
-    private logger!: Logger
-
     @injected
     private prisma!: PrismaClient
 
     @injected
     private ossService!: OSSService
-
-    constructor() {
-        asyncInitializeRoutine.addInitializer(async () => {
-            try {
-                this.logger.info('Checking OSS shop bucket')
-                if (await this.ossService.createBucketIfNotExist('shop')) {
-                    this.logger.info('Shop bucket does not exist, creating...')
-                }
-                this.logger.info('OSS shop bucket OK')
-            } catch (err) {
-                this.logger.error({ err }, 'OSS shop bucket check failed')
-                process.exit(1)
-            }
-        })
-    }
 
     async getFilteredGlobalShops(currentUserId: string, pageSkip: number, pageLimit: number, filterKeywords: string[], minCreatedAt?: Date, maxCreatedAt?: Date) {
         return await this.prisma.$transaction(async tx => {
@@ -78,12 +58,12 @@ export default class ShopService {
 
     async getShopImageLinks(shopId: string) {
         const [coverOrigin, coverThumbnail, detailOrigin, detailThumbnail, licenseOrigin, licenseThumbnail] = await Promise.all([
-            this.ossService.getObjectUrl('shop', `${shopId}-cover.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-cover-thumbnail.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-detail.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-detail-thumbnail.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-license.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-license-thumbnail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/cover.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/cover-thumbnail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/detail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/detail-thumbnail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/license.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/license-thumbnail.webp`),
         ])
         return {
             cover: { origin: coverOrigin, thumbnail: coverThumbnail },
@@ -196,12 +176,12 @@ export default class ShopService {
             }
             await tx.shop.delete({ where: { id } })
             await Promise.all([
-                this.ossService.removeObject('shop', `${id}-cover.webp`),
-                this.ossService.removeObject('shop', `${id}-cover-thumbnail.webp`),
-                this.ossService.removeObject('shop', `${id}-detail.webp`),
-                this.ossService.removeObject('shop', `${id}-detail-thumbnail.webp`),
-                this.ossService.removeObject('shop', `${id}-license.webp`),
-                this.ossService.removeObject('shop', `${id}-license-thumbnail.webp`),
+                this.ossService.removeObject(`shops/${id}/cover.webp`),
+                this.ossService.removeObject(`shops/${id}/cover-thumbnail.webp`),
+                this.ossService.removeObject(`shops/${id}/detail.webp`),
+                this.ossService.removeObject(`shops/${id}/detail-thumbnail.webp`),
+                this.ossService.removeObject(`shops/${id}/license.webp`),
+                this.ossService.removeObject(`shops/${id}/license-thumbnail.webp`),
             ])
         })
     }
@@ -273,18 +253,18 @@ export default class ShopService {
         const tasks = []
         if (cover) {
             tasks.push(
-                this.ossService.putObject('shop', `${id}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
-                this.ossService.putObject('shop', `${id}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                this.ossService.putObject(`shops/${id}/cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`shops/${id}/cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
         if (detail) {
             tasks.push(
-                this.ossService.putObject('shop', `${id}-detail.webp`, sharp(detail).toFormat('webp'), this.ossContentType),
-                this.ossService.putObject('shop', `${id}-detail-thumbnail.webp`, sharp(detail).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                this.ossService.putObject(`shops/${id}/detail.webp`, sharp(detail).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`shops/${id}/detail-thumbnail.webp`, sharp(detail).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
         if (license) {
             tasks.push(
-                this.ossService.putObject('shop', `${id}-license.webp`, sharp(license).toFormat('webp'), this.ossContentType),
-                this.ossService.putObject('shop', `${id}-license-thumbnail.webp`, sharp(license).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                this.ossService.putObject(`shops/${id}/license.webp`, sharp(license).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`shops/${id}/license-thumbnail.webp`, sharp(license).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
         await Promise.all(tasks)
     }

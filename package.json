@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npx prisma generate && npx tsc -p .",
-    "start": "npm run build && node ."
+    "prestart": "npm run build",
+    "start": "node ."
   },
   "author": "",
   "license": "AGPL-3.0-only",
