@@ -2,7 +2,7 @@ import express, { Router } from 'express'
 import { errorHandler } from '../middleware/errorhandler.middleware'
 import { factoryInjection, factoryMethod, injected } from '../util/injection-decorators'
 
-class APIFactory {
+class APIRoute {
 
     @factoryMethod
     static apiRoute(
@@ -16,12 +16,12 @@ class APIFactory {
         const router = Router()
 
         router.use(express.json())
-        router.use('/', helloController)
-        router.use('/', authController)
-        router.use('/', userController)
-        router.use('/', shopController)
-        router.use('/', shopCategoryController)
-        router.use('/', itemCategoryController)
+        router.use(helloController)
+        router.use(authController)
+        router.use(userController)
+        router.use(shopController)
+        router.use(shopCategoryController)
+        router.use(itemCategoryController)
         router.use(errorHandler)
 
         return router
@@ -29,4 +29,4 @@ class APIFactory {
 
 }
 
-export default factoryInjection(APIFactory)
+export default factoryInjection(APIRoute)
