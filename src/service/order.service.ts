@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient, OrderStatus } from '@prisma/client'
 import { classInjection, injected } from '../util/injection-decorators'
 import { ResponseError } from '../util/errors'
+import haversine from 'haversine-distance'
 import OSSService from './oss.service'
 
 type Status = 'unpaid' | 'preparing' | 'prepared' | 'delivering' | 'finished' | 'canceled'
@@ -156,10 +157,7 @@ export default class OrderService {
             return await tx.order.findMany({
                 where: { 
                     shopId,
-                    status: {
-                        notIn: ['UNPAID', 'CANCELED'],
-                        equals: toOrderStatus(status)
-                    }
+                    status: toOrderStatus(status)
                 },
                 skip: pageSkip,
                 take: pageLimit,
@@ -195,10 +193,23 @@ export default class OrderService {
             if (!currentUser) {
                 throw new ResponseError(401, 'Unauthorized')
             }
-            const shop = await tx.shop.findUnique({ where: { id: shopId } })
+
+            const shop = await tx.shop.findUnique({ where: {
+                id: shopId,
+                verified: true,
+            }})
             if (!shop) {
                 throw new ResponseError(404, 'Shop not found')
             }
+            const now = new Date()
+            const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes()
+            const openMinutes = shop.openTimeStart
+            const closeMinutes = shop.openTimeEnd
+            let isOpen = shop.opened && (closeMinutes > openMinutes ? nowMinutes >= openMinutes && nowMinutes < closeMinutes : nowMinutes >= openMinutes || nowMinutes < closeMinutes)
+            if (!isOpen) {
+                throw new ResponseError(403, 'Shop is not open')
+            }
+
             const cartItems = await tx.cartItem.findMany({
                 where: {
                     customerId: currentUserId,
@@ -209,11 +220,8 @@ export default class OrderService {
             if (cartItems.length === 0) {
                 throw new ResponseError(400, 'Cart is empty')
             }
-            const address = await tx.address.findUnique({
-                where: { id: addressId, userId: currentUserId },
-            })
-            if (!address) {
-                throw new ResponseError(404, 'Address not found')
+            if (cartItems.some(item => !item.item.available || item.item.stockout)) {
+                throw new ResponseError(403, 'Some items are not available or out of stock')
             }
             const orderItems = cartItems.map(item => ({
                 itemId: item.itemId,
@@ -221,13 +229,35 @@ export default class OrderService {
                 quantity: item.quantity,
                 price: item.item.price * item.quantity,
             }))
+            const total = orderItems.reduce((sum, item) => sum + item.price, 0)
+            if (total < shop.deliveryThreshold) {
+                throw new ResponseError(403, 'Order total is below the minimum value')
+            }
+
+            const address = await tx.address.findUnique({
+                where: { id: addressId, userId: currentUserId },
+            })
+            if (!address) {
+                throw new ResponseError(404, 'Address not found')
+            }
+            const distance = 0.001 * haversine(
+                { latitude: shop.addressLatitude, longitude: shop.addressLongitude },
+                { latitude: address.latitude, longitude: address.longitude }
+            )
+            if (distance > shop.maximumDistance) {
+                throw new ResponseError(403, 'Delivery distance exceeded')
+            }
+
+            await tx.cartItem.deleteMany({
+                where: { customerId: currentUserId, item: { shopId } },
+            })
             
             return await tx.order.create({
                 data: {
                     customerId: currentUserId,
                     shopId,
                     deliveryFee: shop.deliveryPrice,
-                    total: shop.deliveryPrice + orderItems.reduce((sum, item) => sum + item.price, 0),
+                    total: shop.deliveryPrice + total,
                     note,
                     items: { create: orderItems },
                     shopLatitude: shop.addressLatitude,

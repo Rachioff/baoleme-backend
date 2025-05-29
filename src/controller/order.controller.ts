@@ -105,10 +105,10 @@ class OrderController {
             '/orders/as-shop/:shopId',
             authService.requireAuth(),
             validateParams(OrderSchema.shopIdParams),
-            validateQuery(OrderSchema.getOrdersQuery),
+            validateQuery(OrderSchema.getOrdersAsShopQuery),
             async (req, res) => {
                 const { shopId } = req.params as unknown as OrderSchema.ShopIdParams
-                const { p, pn, s } = req.query as unknown as OrderSchema.GetOrdersQuery
+                const { p, pn, s } = req.query as unknown as OrderSchema.GetOrdersAsShopQuery
                 const pageSkip = parseInt(p) * parseInt(pn)
                 const pageLimit = parseInt(pn)
                 const orders = await orderService.getOrdersAsShop(req.user!.id, shopId, pageSkip, pageLimit, s)

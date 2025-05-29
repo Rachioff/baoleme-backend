@@ -12,6 +12,18 @@ export interface GetOrdersQuery {
     s?: 'unpaid' | 'preparing' | 'prepared' | 'delivering' | 'finished' | 'canceled'
 }
 
+export const getOrdersAsShopQuery = Joi.object({
+    p: Joi.number().integer().min(1).default(1).optional(),
+    pn: Joi.number().integer().min(1).max(100).default(10).optional(),
+    s: Joi.string().valid('preparing', 'prepared', 'delivering', 'finished').optional(),
+}).required()
+
+export interface GetOrdersAsShopQuery {
+    p: string
+    pn: string
+    s?: 'preparing' | 'prepared' | 'delivering' | 'finished'
+}
+
 export const createOrder = Joi.object({
     shopId: Joi.string().uuid().required(),
     addressId: Joi.string().uuid().required(),
