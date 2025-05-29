@@ -1,7 +1,15 @@
-import { Prisma, PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient, OrderStatus } from '@prisma/client'
 import { classInjection, injected } from '../util/injection-decorators'
 import { ResponseError } from '../util/errors'
 import OSSService from './oss.service'
+
+type Status = 'unpaid' | 'preparing' | 'prepared' | 'delivering' | 'finished' | 'canceled'
+
+function toOrderStatus(status: Status): OrderStatus
+function toOrderStatus(status: Status | undefined): OrderStatus | undefined
+function toOrderStatus(status: Status | undefined): OrderStatus | undefined {
+    return status ? status.toUpperCase() as OrderStatus : undefined
+}
 
 @classInjection
 export default class OrderService {
@@ -97,7 +105,7 @@ export default class OrderService {
         return { origin, thumbnail }
     }
 
-    async getOrders(currentUserId: string, pageSkip: number, pageLimit: number) {
+    async getOrders(currentUserId: string, pageSkip: number, pageLimit: number, status?: Status) {
         return await this.prisma.$transaction(async tx => {
             const currentUser = await tx.user.findUnique({
                 where: { id: currentUserId },
@@ -106,6 +114,71 @@ export default class OrderService {
                 throw new ResponseError(403, 'Permission denied')
             }
             return await tx.order.findMany({
+                skip: pageSkip,
+                take: pageLimit,
+                where: { status: toOrderStatus(status) },
+                orderBy: { createdAt: 'desc' },
+                include: { items: true },
+            })
+        })
+    }
+
+    async getOrdersAsCustomer(currentUserId: string, pageSkip: number, pageLimit: number, status: Status | undefined) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({
+                where: { id: currentUserId },
+            })
+            if (!currentUser) {
+                throw new ResponseError(401, 'Unauthorized')
+            }
+            return await tx.order.findMany({
+                where: { customerId: currentUserId, status: toOrderStatus(status) },
+                skip: pageSkip,
+                take: pageLimit,
+                orderBy: { createdAt: 'desc' },
+                include: { items: true },
+            })
+        })
+    }
+
+    async getOrdersAsShop(currentUserId: string, shopId: string, pageSkip: number, pageLimit: number, status: Status | undefined) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({
+                where: { id: currentUserId },
+            })
+            if (!currentUser) {
+                throw new ResponseError(401, 'Unauthorized')
+            }
+            const shop = await tx.shop.findUnique({ where: { id: shopId } })
+            if (!shop || shop.ownerId !== currentUserId) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            return await tx.order.findMany({
+                where: { 
+                    shopId,
+                    status: {
+                        notIn: ['UNPAID', 'CANCELED'],
+                        equals: toOrderStatus(status)
+                    }
+                },
+                skip: pageSkip,
+                take: pageLimit,
+                orderBy: { createdAt: 'desc' },
+                include: { items: true },
+            })
+        })
+    }
+
+    async getOrdersAsRider(currentUserId: string, pageSkip: number, pageLimit: number, status: Status | undefined) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({
+                where: { id: currentUserId },
+            })
+            if (!currentUser) {
+                throw new ResponseError(401, 'Unauthorized')
+            }
+            return await tx.order.findMany({
+                where: { riderId: currentUserId, status: toOrderStatus(status) },
                 skip: pageSkip,
                 take: pageLimit,
                 orderBy: { createdAt: 'desc' },
@@ -205,6 +278,102 @@ export default class OrderService {
                 }
             }
             return { order, doOmit }
+        })
+    }
+
+    async updateOrderRider(currentUserId: string, id: string) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({
+                where: { id: currentUserId },
+            })
+            if (!currentUser) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const order = await tx.order.findUnique({
+                where: { id },
+                include: { items: true },
+            })
+            if (!order) {
+                throw new ResponseError(404, 'Order not found')
+            }
+            if (order.status !== 'PREPARED') {
+                throw new ResponseError(403, 'Order status is not PREPARED')
+            }
+            return await tx.order.update({
+                where: { id },
+                data: {
+                    riderId: currentUserId,
+                    status: 'DELIVERING',
+                    deliveredAt: new Date(),
+                },
+                include: { items: true },
+            })
+        })
+    }
+
+    async updateOrderStatus(currentUserId: string, id: string, status: Status) {
+        return await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({
+                where: { id: currentUserId },
+            })
+            if (!currentUser) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const order = await tx.order.findUnique({
+                where: { id },
+                include: { items: true, shop: { select: { ownerId: true } } },
+            })
+            if (!order) {
+                throw new ResponseError(404, 'Order not found')
+            }
+            const stateTransition: [boolean, 'canceledAt' | 'paidAt' | 'preparedAt' | 'finishedAt'][] = [
+                [currentUser.id === order.customerId && order.status === 'UNPAID' && status === 'canceled', 'canceledAt'],
+                [currentUser.id === order.customerId && order.status === 'UNPAID' && status === 'preparing', 'paidAt'],
+                [currentUser.id === order.shop?.ownerId && order.status === 'PREPARING' && status === 'prepared', 'preparedAt'],
+                [currentUser.id === order.riderId && order.status === 'DELIVERING' && status === 'finished', 'finishedAt'],
+            ]
+            const permittedStatusProp = stateTransition.find(([permitted]) => permitted)?.[1]
+            if (permittedStatusProp) {
+                return await tx.order.update({
+                    where: { id },
+                    data: {
+                        status: toOrderStatus(status),
+                        [permittedStatusProp]: new Date(),
+                    },
+                    include: { items: true },
+                })
+            } else if (currentUser.role === 'ADMIN') {
+                return await tx.order.update({
+                    where: { id },
+                    data: {
+                        status: toOrderStatus(status),
+                    },
+                    include: { items: true },
+                })
+            } else {
+                throw new ResponseError(403, 'Permission denied')
+            }
+        })
+    }
+
+    async deleteOrder(currentUserId: string, id: string) {
+        await this.prisma.$transaction(async tx => {
+            const currentUser = await tx.user.findUnique({
+                where: { id: currentUserId },
+            })
+            if (!currentUser) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            const order = await tx.order.findUnique({
+                where: { id },
+            })
+            if (!order) {
+                throw new ResponseError(404, 'Order not found')
+            }
+            if (order.status !== 'CANCELED' || order.customerId !== currentUserId) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+            await tx.order.delete({ where: { id } })
         })
     }
 
