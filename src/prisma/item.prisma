@@ -1,0 +1,14 @@
+model Item {
+    id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    name                    String
+    description             String
+    available               Boolean         @default(true)
+    stockout                Boolean         @default(false)
+    price                   Int
+    priceWithoutPromotion   Int
+    createdAt               DateTime        @default(now())
+    updatedAt               DateTime        @updatedAt
+    shop                    Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+    shopId                  String          @db.Uuid
+    categories              ItemCategory[]
+} 
