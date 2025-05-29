@@ -18,6 +18,7 @@ model User {
     createdAt           DateTime            @default(now())
     updatedAt           DateTime            @updatedAt
 
+    addresses           Address[]
     shops               Shop[]
     customerOrders      Order[]             @relation(name: "fk_customer")
     riderOrders         Order[]             @relation(name: "fk_rider")

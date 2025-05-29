@@ -4,7 +4,7 @@ enum OrderStatus {
     PREPARED
     DELIVERING
     FINISHED
-    CANCELLED
+    CANCELED
 }
 
 model OrderItem {
@@ -13,6 +13,7 @@ model OrderItem {
     orderId     String  @db.Uuid
     item        Item?   @relation(fields: [itemId], references: [id], onDelete: SetNull)
     itemId      String? @db.Uuid
+    name        String
     quantity    Int
     price       Int
 }
@@ -35,8 +36,8 @@ model Order {
     deliveryFee         Int
     total               Int
     note                String
-    deliveryLatitude    Float
-    deliveryLongitude   Float
+    deliveryLatitude    Float?
+    deliveryLongitude   Float?
 
     items               OrderItem[]
 
