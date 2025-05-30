@@ -21,21 +21,21 @@ jobs:
     - name: Build the Docker image
       run: |
         docker build . --file Dockerfile --tag $env:IMAGE_NAME
+        docker image tag $env:IMAGE_NAME $env:IMAGE_NAME_LATEST
     - name: Run Docker compose
       run: |
         docker compose -f scripts/ci-compose.yml up -d --wait
     - name: Run tests
       run: |
-        docker exec baoleme-backend npm run test:unit
+        docker container exec baoleme-backend npm run test:unit
     - name: Save Docker image
       run: |
-        docker tag $env:IMAGE_NAME $env:IMAGE_NAME_LATEST
-        docker image save $env:IMAGE_NAME_LATEST -o baoleme-backend.tar
+        docker image save $env:IMAGE_NAME_LATEST | gzip > baoleme-backend.tar.gz
     - name: Upload Docker image
       uses: actions/upload-artifact@v4
       with:
         name: baoleme-backend
-        path: baoleme-backend.tar
+        path: baoleme-backend.tar.gz
 
   deploy:
     runs-on: ubuntu-latest
@@ -52,6 +52,15 @@ jobs:
         server: ${{ vars.SSH_HOST }}
         port: ${{ vars.SSH_PORT }}
         ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
-        local_path: ./baoleme-backend.tar
-        remote_path: ~/images
-    
+        local_path: ./baoleme-backend.tar.gz
+        remote_path: /home/ci/images
+    - name: Restart backend service
+      uses: appleboy/ssh-action@v1
+      with:
+        username: ${{ vars.SSH_USER }}
+        host: ${{ vars.SSH_HOST }}
+        port: ${{ vars.SSH_PORT }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          docker image load -i /home/ci/images/baoleme-backend.tar.gz
+          docker compose -f /home/ci/server/docker-compose.yml up --wait

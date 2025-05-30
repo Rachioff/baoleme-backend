@@ -23,6 +23,7 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=baoleme
+      - STATIC_ROOT=.
     depends_on:
       postgres:
         condition: service_healthy
