@@ -8,10 +8,8 @@ RUN npm install -D
 
 COPY . .
 
-RUN npx prisma generate
-
-RUN npx tsc -p .
+RUN npm run build
 
 EXPOSE 3000
 
-CMD npx prisma migrate deploy && node .
+CMD sh scripts/start-server.sh

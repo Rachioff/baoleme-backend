@@ -5,7 +5,8 @@
   "scripts": {
     "test:unit": "npx jest --rootDir=test/unit",
     "build": "npx prisma generate && npx tsc -p .",
-    "start": "npm run build && node ."
+    "prestart": "npm run build",
+    "start": "node ."
   },
   "author": "",
   "license": "AGPL-3.0-only",
@@ -18,6 +19,7 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-joi-validation": "^6.0.0",
+    "haversine-distance": "^1.2.3",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "minio": "^8.0.5",
