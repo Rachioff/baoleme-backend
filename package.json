@@ -15,6 +15,7 @@
     "awilix": "^12.0.5",
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
+    "connect-history-api-fallback": "^2.0.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-joi-validation": "^6.0.0",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@types/connect-history-api-fallback": "^1.5.4",
     "@types/express": "^5.0.1",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.9",
