@@ -1,7 +1,5 @@
 import { Prisma, PrismaClient, Shop, ShopCategory, User } from "@prisma/client";
 import { classInjection, injected } from "../util/injection-decorators";
-import { asyncInitializeRoutine } from "../app/container";
-import { Logger } from "pino";
 import OSSService from "./oss.service";
 import { CreateShop, UpdateShopProfile } from "../schema/shop.schema";
 import { ResponseError } from "../util/errors";
@@ -10,29 +8,11 @@ import sharp from "sharp";
 @classInjection
 export default class ShopService {
 
-    @injected('logger', true)
-    private logger!: Logger
-
     @injected
     private prisma!: PrismaClient
 
     @injected
     private ossService!: OSSService
-
-    constructor() {
-        asyncInitializeRoutine.addInitializer(async () => {
-            try {
-                this.logger.info('Checking OSS shop bucket')
-                if (await this.ossService.createBucketIfNotExist('shop')) {
-                    this.logger.info('Shop bucket does not exist, creating...')
-                }
-                this.logger.info('OSS shop bucket OK')
-            } catch (err) {
-                this.logger.error({ err }, 'OSS shop bucket check failed')
-                process.exit(1)
-            }
-        })
-    }
 
     async getFilteredGlobalShops(currentUserId: string, pageSkip: number, pageLimit: number, filterKeywords: string[], minCreatedAt?: Date, maxCreatedAt?: Date) {
         return await this.prisma.$transaction(async tx => {
@@ -41,7 +21,7 @@ export default class ShopService {
                 throw new ResponseError(403, 'Permission denied')
             }
             return await tx.shop.findMany({
-                include: { categories: true, address: true },
+                include: { categories: true },
                 where: {
                     AND: [
                         {
@@ -69,7 +49,7 @@ export default class ShopService {
                 throw new ResponseError(404, 'User not found')
             }
             return await tx.shop.findMany({
-                include: { categories: true, address: true },
+                include: { categories: true },
                 where: { ownerId },
                 orderBy: { createdAt: 'desc' },
             })
@@ -78,12 +58,12 @@ export default class ShopService {
 
     async getShopImageLinks(shopId: string) {
         const [coverOrigin, coverThumbnail, detailOrigin, detailThumbnail, licenseOrigin, licenseThumbnail] = await Promise.all([
-            this.ossService.getObjectUrl('shop', `${shopId}-cover.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-cover-thumbnail.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-detail.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-detail-thumbnail.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-license.webp`),
-            this.ossService.getObjectUrl('shop', `${shopId}-license-thumbnail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/cover.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/cover-thumbnail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/detail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/detail-thumbnail.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/license.webp`),
+            this.ossService.getObjectUrl(`shops/${shopId}/license-thumbnail.webp`),
         ])
         return {
             cover: { origin: coverOrigin, thumbnail: coverThumbnail },
@@ -92,7 +72,7 @@ export default class ShopService {
         }
     }
 
-    async shopDataToFullShopInfo(shop: Prisma.ShopGetPayload<{ include: { categories: true, address: true } }>) {
+    async shopDataToFullShopInfo(shop: Prisma.ShopGetPayload<{ include: { categories: true } }>) {
         return {
             id: shop.id,
             owner: shop.ownerId,
@@ -105,20 +85,20 @@ export default class ShopService {
         }
     }
 
-    shopDataToShopProfile(shop: Prisma.ShopGetPayload<{ include: { categories: true, address: true } }>) {
+    shopDataToShopProfile(shop: Prisma.ShopGetPayload<{ include: { categories: true } }>) {
         return {
             name: shop.name,
             description: shop.description,
             categories: shop.categories.map(category => category.id),
             address: {
-                coordinate: [shop.address?.latitude, shop.address?.longitude],
-                province: shop.address?.province,
-                city: shop.address?.city,
-                district: shop.address?.district,
-                town: shop.address?.town,
-                address: shop.address?.address,
-                name: shop.address?.name,
-                tel: shop.address?.tel,
+                coordinate: [shop.addressLatitude, shop.addressLongitude],
+                province: shop.addressProvince,
+                city: shop.addressCity,
+                district: shop.addressDistrict,
+                town: shop.addressTown,
+                address: shop.addressAddress,
+                name: shop.addressName,
+                tel: shop.addressTel,
             },
             verified: shop.verified,
             opened: shop.opened,
@@ -155,21 +135,17 @@ export default class ShopService {
                     deliveryPrice,
                     maximumDistance,
                     categories: { connect: categories.map(id => ({ id })) },
-                    address: {
-                        create: {
-                            latitude: address.coordinate[0],
-                            longitude: address.coordinate[1],
-                            province: address.province,
-                            city: address.city,
-                            district: address.district,
-                            town: address.town,
-                            address: address.address,
-                            name: address.name,
-                            tel: address.tel
-                        }
-                    }
+                    addressLatitude: address.coordinate[0],
+                    addressLongitude: address.coordinate[1],
+                    addressProvince: address.province,
+                    addressCity: address.city,
+                    addressDistrict: address.district,
+                    addressTown: address.town,
+                    addressAddress: address.address,
+                    addressName: address.name,
+                    addressTel: address.tel
                 },
-                include: { categories: true, address: true }
+                include: { categories: true }
             })
         })
     }
@@ -177,7 +153,7 @@ export default class ShopService {
     async getShop(id: string) {
         const shop = await this.prisma.shop.findUnique({
             where: { id },
-            include: { categories: true, address: true }
+            include: { categories: true }
         })
         if (!shop) {
             throw new ResponseError(404, 'Shop not found')
@@ -200,12 +176,12 @@ export default class ShopService {
             }
             await tx.shop.delete({ where: { id } })
             await Promise.all([
-                this.ossService.removeObject('shop', `${id}-cover.webp`),
-                this.ossService.removeObject('shop', `${id}-cover-thumbnail.webp`),
-                this.ossService.removeObject('shop', `${id}-detail.webp`),
-                this.ossService.removeObject('shop', `${id}-detail-thumbnail.webp`),
-                this.ossService.removeObject('shop', `${id}-license.webp`),
-                this.ossService.removeObject('shop', `${id}-license-thumbnail.webp`),
+                this.ossService.removeObject(`shops/${id}/cover.webp`),
+                this.ossService.removeObject(`shops/${id}/cover-thumbnail.webp`),
+                this.ossService.removeObject(`shops/${id}/detail.webp`),
+                this.ossService.removeObject(`shops/${id}/detail-thumbnail.webp`),
+                this.ossService.removeObject(`shops/${id}/license.webp`),
+                this.ossService.removeObject(`shops/${id}/license-thumbnail.webp`),
             ])
         })
     }
@@ -239,19 +215,15 @@ export default class ShopService {
                     name,
                     description,
                     categories: { set: categories?.map(id => ({ id })) },
-                    address: {
-                        update: {
-                            latitude: address?.coordinate?.[0],
-                            longitude: address?.coordinate?.[1],
-                            province: address?.province,
-                            city: address?.city,
-                            district: address?.district,
-                            town: address?.town,
-                            address: address?.address,
-                            name: address?.name,
-                            tel: address?.tel
-                        }
-                    },
+                    addressLatitude: address?.coordinate?.[0],
+                    addressLongitude: address?.coordinate?.[1],
+                    addressProvince: address?.province,
+                    addressCity: address?.city,
+                    addressDistrict: address?.district,
+                    addressTown: address?.town,
+                    addressAddress: address?.address,
+                    addressName: address?.name,
+                    addressTel: address?.tel,
                     verified,
                     opened,
                     openTimeStart,
@@ -260,7 +232,7 @@ export default class ShopService {
                     deliveryPrice,
                     maximumDistance
                 },
-                include: { categories: true, address: true }
+                include: { categories: true }
             })
         })
     }
@@ -281,18 +253,18 @@ export default class ShopService {
         const tasks = []
         if (cover) {
             tasks.push(
-                this.ossService.putObject('shop', `${id}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
-                this.ossService.putObject('shop', `${id}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                this.ossService.putObject(`shops/${id}/cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`shops/${id}/cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
         if (detail) {
             tasks.push(
-                this.ossService.putObject('shop', `${id}-detail.webp`, sharp(detail).toFormat('webp'), this.ossContentType),
-                this.ossService.putObject('shop', `${id}-detail-thumbnail.webp`, sharp(detail).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                this.ossService.putObject(`shops/${id}/detail.webp`, sharp(detail).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`shops/${id}/detail-thumbnail.webp`, sharp(detail).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
         if (license) {
             tasks.push(
-                this.ossService.putObject('shop', `${id}-license.webp`, sharp(license).toFormat('webp'), this.ossContentType),
-                this.ossService.putObject('shop', `${id}-license-thumbnail.webp`, sharp(license).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                this.ossService.putObject(`shops/${id}/license.webp`, sharp(license).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`shops/${id}/license-thumbnail.webp`, sharp(license).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
         await Promise.all(tasks)
     }
