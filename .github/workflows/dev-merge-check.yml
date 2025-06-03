@@ -1,11 +1,6 @@
-# 合并到 dev 分支时执行检查
-# 当前只进行是否能通过编译的检查
-
 name: dev merge check
 
 on:
-  push:
-    branches: [ "dev" ]
   pull_request:
     branches: [ "dev" ]
   workflow_dispatch:
@@ -30,3 +25,4 @@ jobs:
 
     - run: npm ci
     - run: npm run build
+    - run: npm run test:unit
