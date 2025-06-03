@@ -251,7 +251,7 @@ export default class ItemService {
         }
     }
 
-    async getShopCategoryItems(shopId:string,categoryId:string){
+    async getShopCategoryItems(currentUserId:string,shopId:string,categoryId:string,pageSkip:number,pageLimit:number){
         return await this.prisma.$transaction(async tx => {
             const shop = await tx.shop.findUnique({ where: { id: shopId } });
             if (!shop) {
@@ -266,6 +266,11 @@ export default class ItemService {
         if (!category) {
             throw new ResponseError(404, 'Item category not found in this shop');
         }
+        const user = await tx.user.findUnique({
+            where: { id: currentUserId }
+        })
+        const onlyAvailable = user?.role === 'USER';
+
         return await tx.item.findMany({
             where: {
                 shopId: shopId,
@@ -274,30 +279,41 @@ export default class ItemService {
                         id: categoryId
                     }
                 },
-                available: true
+                available: onlyAvailable ? true : undefined
             },
             include: {
                 categories: true,
                 shop: true
             },
+            skip: pageSkip,
+            take: pageLimit,
             orderBy: { createdAt: 'desc' }
         });
     });
     }
-    async getItems(shopId:string){
+    async getItems(currentUserId:string,shopId:string,pageSkip:number,pageLimit:number){
         return await this.prisma.$transaction(async tx => {
             if (!await tx.shop.findUnique({ where: { id: shopId } })) {
                 throw new ResponseError(404, 'Shop not found')
             }
+            const user = await tx.user.findUnique({
+                where: { id: currentUserId }
+            })
+            const onlyAvailable = user?.role === 'USER';
             return await tx.item.findMany({
                 include:{categories: true, shop: true},
-                where: { available: true },
+                where: { 
+                    shopId: shopId,
+                    available: onlyAvailable ? true : undefined
+                },
+                skip: pageSkip,
+                take: pageLimit,
                 orderBy: { createdAt: 'desc' }
             })
         })        
     }
 
-    async getItem(id: string) {
+    async getItem(currentUserId:string,id: string) {
         const item = await this.prisma.item.findUnique({
             where: { id },
             include: { categories: true, shop: true }
@@ -305,8 +321,15 @@ export default class ItemService {
         if (!item) {
             throw new ResponseError(404, 'Item not found')
         }
+        const currentUser = await this.prisma.user.findUnique({ where: { id: currentUserId } })
+        if(!currentUser||currentUser.role==='USER'){
+            if(!item.available){
+                throw new ResponseError(404, 'Item not found')
+            }
+        }
         return item
     }
+
 
     async createItem(userId: string,shopId:string,request: CreateItem){
         const { name, description, available, stockout, price, priceWithoutPromotion, categories} = request
@@ -405,27 +428,27 @@ export default class ItemService {
         })
     }
     async updateItemImage(currentUserId: string, id: string, cover: Buffer | undefined) {
-            await this.prisma.$transaction(async tx => {
-                const item = await tx.item.findUnique({ 
-                    where: { id },
-                    include: { shop: true }
-                })
-                if (!item) {
-                    throw new ResponseError(404, 'Item not found')
-                }
-                const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
-                if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== item.shop.ownerId)) {
-                    throw new ResponseError(403, 'Permission denied')
-                }
+        await this.prisma.$transaction(async tx => {
+            const item = await tx.item.findUnique({ 
+                where: { id },
+                include: { shop: true }
             })
-            const tasks = []
-            if (cover) {
-                tasks.push(
-                    this.ossService.putObject(`items/${id}/cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
-                    this.ossService.putObject(`items/${id}/cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+            if (!item) {
+                throw new ResponseError(404, 'Item not found')
             }
-            await Promise.all(tasks)
+            const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+            if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== item.shop.ownerId)) {
+                throw new ResponseError(403, 'Permission denied')
+            }
+        })
+        const tasks = []
+        if (cover) {
+            tasks.push(
+                this.ossService.putObject(`items/${id}/cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
+                this.ossService.putObject(`items/${id}/cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
         }
+        await Promise.all(tasks)
+    }
     async deleteItem(currentUserId: string, id: string) {
         await this.prisma.$transaction(async tx => {
             const item = await tx.item.findUnique({ 

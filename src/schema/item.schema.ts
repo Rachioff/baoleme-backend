@@ -30,6 +30,11 @@ export const itemsQueryParams = Joi.object({
     pn: Joi.number().integer().min(1).max(100).default(10).optional(),
 })
 
+export interface itemsQueryParams{
+    p: string,
+    pn:string
+}
+
 export const createItem = Joi.object({
     name: Joi.string().required(),
     description: Joi.string().allow('').optional(),

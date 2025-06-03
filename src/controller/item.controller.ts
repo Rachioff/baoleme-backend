@@ -15,22 +15,31 @@ class ItemController {
         const router = Router()
 
         router.get(
-            '/shops/{shopId}/item-categories/{categoryId}/items',
+            '/shops/:shopId/item-categories/:categoryId/items',
             authService.requireAuth(),
             validateParams(ItemSchema.shopIdAndcategoryIdParams),
+            validateQuery(ItemSchema.itemsQueryParams),
             async (req, res) => {
                 const { shopId, categoryId } = req.params
-                const items = await itemService.getShopCategoryItems(shopId, categoryId)
+                const { p, pn} = req.query as unknown as ItemSchema.itemsQueryParams
+                const pageSkip = parseInt(p) * parseInt(pn)
+                const pageLimit = parseInt(pn)
+                const items = await itemService.getShopCategoryItems(req.user!.id,shopId, categoryId, pageSkip, pageLimit)
                 res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
             }
         )
+
         router.get(
             '/shops/:shopId/items',
             authService.requireAuth(),
             validateQuery(ItemSchema.itemsQueryParams),
+            validateParams(ItemSchema.shopIdParams),
             async (req, res) => {
                 const {shopId} = req.params
-                const items = await itemService.getItems(shopId)
+                const { p, pn} = req.query as unknown as ItemSchema.itemsQueryParams
+                const pageSkip = parseInt(p) * parseInt(pn)
+                const pageLimit = parseInt(pn)
+                const items = await itemService.getItems(req.user!.id,shopId, pageSkip, pageLimit)
                 res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
             }
         )
@@ -39,9 +48,10 @@ class ItemController {
             '/items/:id',
             authService.requireAuth(),
             validateParams(ItemSchema.itemIdParams),
+            validateQuery(ItemSchema.itemsQueryParams),
             async (req, res) => {
                 const { id } = req.params
-                const item = await itemService.getItem(id)
+                const item = await itemService.getItem(req.user!.id,id)
                 res.status(200).json(await itemService.itemDataToFullItemInfo(item))
             }
         )
