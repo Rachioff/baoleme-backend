@@ -2,37 +2,17 @@ import { Item, ItemCategory, Prisma, PrismaClient } from "@prisma/client";
 import { classInjection, injected } from "../util/injection-decorators";
 import { ResponseError } from "../util/errors";
 import { CreateItem, UpdateItemProfile } from '../schema/item.schema'
-import { asyncInitializeRoutine } from "../app/container";
-import { Logger } from "pino";
 import OSSService from "./oss.service";
 import sharp from "sharp";
 
 @classInjection
 export default class ItemService {
 
-    @injected('logger', true)
-    private logger!: Logger
-
     @injected
     private prisma!: PrismaClient
 
     @injected
     private ossService!: OSSService
-
-    constructor() {
-        asyncInitializeRoutine.addInitializer(async () => {
-            try {
-                this.logger.info('Checking OSS item bucket')
-                if (await this.ossService.createBucketIfNotExist('item')) {
-                    this.logger.info('Item bucket does not exist, creating...')
-                }
-                this.logger.info('OSS item bucket OK')
-            } catch (err) {
-                this.logger.error({ err }, 'OSS item bucket check failed')
-                process.exit(1)
-            }
-        })
-    }
 
     itemCategoryDataToItemCategoryInfo(category: ItemCategory) {
         return {
@@ -238,8 +218,8 @@ export default class ItemService {
 
     async getItemImageLinks(itemId: string) {
         const [coverOrigin, coverThumbnail] = await Promise.all([
-            this.ossService.getObjectUrl('item', `${itemId}-cover.webp`),
-            this.ossService.getObjectUrl('item', `${itemId}-cover-thumbnail.webp`),
+            this.ossService.getObjectUrl(`items/${itemId}/cover.webp`),
+            this.ossService.getObjectUrl(`items/${itemId}/cover-thumbnail.webp`),
         ])
         return {
             cover: { origin: coverOrigin, thumbnail: coverThumbnail }
@@ -441,8 +421,8 @@ export default class ItemService {
             const tasks = []
             if (cover) {
                 tasks.push(
-                    this.ossService.putObject('item', `${id}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
-                    this.ossService.putObject('item', `${id}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+                    this.ossService.putObject(`items/${id}/cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
+                    this.ossService.putObject(`items/${id}/cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
             }
             await Promise.all(tasks)
         }
@@ -462,8 +442,8 @@ export default class ItemService {
             
             await tx.item.delete({ where: { id } })
             await Promise.all([
-                this.ossService.removeObject('item', `${id}-cover.webp`),
-                this.ossService.removeObject('item', `${id}-cover-thumbnail.webp`),
+                this.ossService.removeObject(`items/${id}/cover.webp`),
+                this.ossService.removeObject(`items/${id}/cover-thumbnail.webp`),
             ])
         })
     }

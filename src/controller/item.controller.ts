@@ -20,7 +20,6 @@ class ItemController {
             validateParams(ItemSchema.shopIdAndcategoryIdParams),
             async (req, res) => {
                 const { shopId, categoryId } = req.params
-                const categories = await itemService.getItemCategory(shopId,categoryId)
                 const items = await itemService.getShopCategoryItems(shopId, categoryId)
                 res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
             }
@@ -83,10 +82,8 @@ class ItemController {
             validateImage(),
             async (req, res) => {
                 const { id } = req.params
-                const { cover} = req.files as {
-                    cover?: Express.Multer.File[]
-                }
-                await itemService.updateItemImage(req.user!.id,id,cover?.[0].buffer)
+                const cover = req.file!
+                await itemService.updateItemImage(req.user!.id, id, cover.buffer)
                     res.status(200).json(await itemService.getItemImageLinks(id))
                 }
         )
