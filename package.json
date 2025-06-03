@@ -4,8 +4,8 @@
   "main": "out/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc -p .",
-    "start": "tsc -p . && node ."
+    "build": "npx prisma generate && npx tsc -p .",
+    "start": "npm run build && node ."
   },
   "author": "",
   "license": "AGPL-3.0-only",
