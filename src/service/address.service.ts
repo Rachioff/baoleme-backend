@@ -1,6 +1,5 @@
 // 文件: src/service/address.service.ts
 import { PrismaClient, Address, Prisma } from '@prisma/client';
-import { Logger } from 'pino';
 import { classInjection, injected } from '../util/injection-decorators';
 import { ResponseError } from '../util/errors';
 
@@ -14,7 +13,6 @@ export interface ApiAddressResponse {
     province: string;
     city: string;
     district: string;
-    town: string | null;
     address: string;
     name: string;
     tel: string;
@@ -23,8 +21,6 @@ export interface ApiAddressResponse {
 
 @classInjection
 export default class AddressService {
-    @injected('logger', true)
-    private logger!: Logger;
 
     @injected
     private prisma!: PrismaClient;
@@ -32,11 +28,10 @@ export default class AddressService {
     private mapDbAddressToApiResponse(dbAddress: Address): ApiAddressResponse {
         return {
             id: dbAddress.id,
-            coordinate: [dbAddress.longitude ?? null, dbAddress.latitude ?? null],
+            coordinate: [dbAddress.longitude, dbAddress.latitude],
             province: dbAddress.province,
             city: dbAddress.city,
             district: dbAddress.district,
-            town: dbAddress.town ?? "",
             address: dbAddress.detail,
             name: dbAddress.recipientName,
             tel: dbAddress.phoneNumber,
@@ -63,7 +58,6 @@ export default class AddressService {
     }
 
     async addAddress(userId: string, apiAddressData: CreateAddressApiDto): Promise<ApiAddressResponse> {
-        this.logger.info({ userId, apiAddressData }, '尝试添加地址');
         const [longitude, latitude] = apiAddressData.coordinate;
 
         const newDbAddress = await this.prisma.$transaction(async (tx) => {
@@ -73,7 +67,7 @@ export default class AddressService {
             });
 
             if (currentAddresses.length >= MAX_ADDRESSES_PER_USER) {
-                throw new ResponseError(400, `一个用户最多只能拥有 ${MAX_ADDRESSES_PER_USER} 个收货地址`);
+                throw new ResponseError(403, `一个用户最多只能拥有 ${MAX_ADDRESSES_PER_USER} 个收货地址`);
             }
 
             if (apiAddressData.isDefault) {
@@ -94,7 +88,6 @@ export default class AddressService {
                     province: apiAddressData.province,
                     city: apiAddressData.city,
                     district: apiAddressData.district,
-                    town: apiAddressData.town,
                     detail: apiAddressData.address,
                     longitude,
                     latitude,
@@ -108,7 +101,6 @@ export default class AddressService {
     }
 
     async getAddresses(userId: string): Promise<ApiAddressResponse[]> {
-        this.logger.info({ userId }, '获取用户地址列表');
         const dbAddresses = await this.prisma.address.findMany({
             where: { userId },
             orderBy: { displayOrder: 'asc' },
@@ -117,7 +109,6 @@ export default class AddressService {
     }
 
     async getAddressById(currentUserId: string, addressId: string): Promise<ApiAddressResponse> {
-        this.logger.info({ currentUserId, addressId }, '获取单个地址信息');
         const dbAddress = await this.prisma.address.findUnique({
             where: { id: addressId },
         });
@@ -126,23 +117,18 @@ export default class AddressService {
             throw new ResponseError(404, '收货地址未找到');
         }
         if (dbAddress.userId !== currentUserId) {
-
-            this.logger.warn({ currentUserId, addressOwnerId: dbAddress.userId }, '尝试获取他人地址信息');
             throw new ResponseError(403, '无权查看此地址');
         }
         return this.mapDbAddressToApiResponse(dbAddress);
     }
 
     async updateAddress(currentUserId: string, addressId: string, apiAddressData: UpdateAddressApiDto): Promise<ApiAddressResponse> {
-        this.logger.info({ currentUserId, addressId, apiAddressData }, '尝试更新地址');
-        
         const dataToUpdate: Prisma.AddressUpdateInput = {
             recipientName: apiAddressData.name,
             phoneNumber: apiAddressData.tel,
             province: apiAddressData.province,
             city: apiAddressData.city,
             district: apiAddressData.district,
-            town: apiAddressData.town,
             detail: apiAddressData.address,
             longitude: apiAddressData.coordinate?.[0],
             latitude: apiAddressData.coordinate?.[1],
@@ -156,7 +142,7 @@ export default class AddressService {
             if (existingAddress.userId !== currentUserId) throw new ResponseError(403, '无权修改此地址');
 
             if (typeof apiAddressData.isDefault === 'boolean' && apiAddressData.isDefault) {
-                if (!existingAddress.isDefault || (Object.keys(dataToUpdate).length > 1) ) { 
+                if (!existingAddress.isDefault || (Object.keys(dataToUpdate).length > 1)) {
                     await tx.address.updateMany({
                         where: { userId: currentUserId, isDefault: true, NOT: { id: addressId } },
                         data: { isDefault: false },
@@ -170,7 +156,7 @@ export default class AddressService {
     }
 
     async updateAddressOrder(currentUserId: string, addressIdToMove: string, orderData: UpdateAddressOrderDto): Promise<ApiAddressResponse[]> {
-        this.logger.info({ currentUserId, addressIdToMove, orderData }, '尝试更新地址次序');
+
 
         await this.prisma.$transaction(async (tx) => {
             const addressToMove = await tx.address.findUnique({
@@ -196,7 +182,7 @@ export default class AddressService {
                     // Cannot move an address before itself, no operation needed.
                     return;
                 }
-                
+
                 // If displayOrders happen to be the same (which ideally shouldn't for different items if managed strictly)
                 // the logic below will still attempt to place addressToMove correctly relative to beforeAddress.
                 // The item.service.ts check `if (category.order === beforeCategory.order) { return }`
@@ -241,7 +227,7 @@ export default class AddressService {
                 });
                 const maxDisplayOrder = maxOrderAgg._max.displayOrder;
 
-                if (maxDisplayOrder === null) { 
+                if (maxDisplayOrder === null) {
                     // This implies no addresses exist for the user, or only this one.
                     // If only this one, setting its order to 0 is appropriate.
                     await tx.address.update({
@@ -275,7 +261,6 @@ export default class AddressService {
 
 
     async deleteAddress(currentUserId: string, addressId: string): Promise<void> {
-        this.logger.info({ currentUserId, addressId }, '尝试删除地址');
 
         await this.prisma.$transaction(async (tx) => {
             const addressToDelete = await tx.address.findUnique({ where: { id: addressId } });
@@ -294,7 +279,7 @@ export default class AddressService {
             if (addressToDelete.isDefault) {
                 const nextDefaultAddress = await tx.address.findFirst({ // findFirst will use the orderBy from reorderdisplayOrders
                     where: { userId: currentUserId },
-                    orderBy: { displayOrder: 'asc' }, 
+                    orderBy: { displayOrder: 'asc' },
                 });
                 if (nextDefaultAddress) {
                     await tx.address.update({
@@ -307,7 +292,6 @@ export default class AddressService {
     }
 
     async setDefaultAddress(currentUserId: string, addressId: string): Promise<ApiAddressResponse> {
-        this.logger.info({ currentUserId, addressId }, '尝试设置默认地址');
 
         const updatedDbAddress = await this.prisma.$transaction(async (tx) => {
             const addressToSetDefault = await tx.address.findUnique({ where: { id: addressId } });

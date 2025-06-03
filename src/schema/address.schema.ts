@@ -18,9 +18,6 @@ export const createAddressSchema = Joi.object({
     district: Joi.string().min(1).required().messages({
         'string.empty': '县级行政区名不能为空', 'string.min': '县级行政区名不能为空', 'any.required': '县级行政区名为必填项',
     }),
-    town: Joi.string().min(1).required().messages({
-        'string.empty': '乡级行政区名不能为空', 'string.min': '乡级行政区名不能为空', 'any.required': '乡级行政区名为必填项',
-    }),
     address: Joi.string().min(1).required().messages({
         'string.empty': '详细地址不能为空', 'string.min': '详细地址不能为空', 'any.required': '详细地址为必填项',
     }),
@@ -40,7 +37,6 @@ export interface CreateAddressApiDto {
     province: string;
     city: string;
     district: string;
-    town: string;
     address: string;
     name: string;
     tel: string;
@@ -52,7 +48,6 @@ export const updateAddressSchema = Joi.object({
     province: Joi.string().min(1).optional(),
     city: Joi.string().min(1).optional(),
     district: Joi.string().min(1).optional(),
-    town: Joi.string().min(1).optional(),
     address: Joi.string().min(1).optional(),
     name: Joi.string().min(1).optional(),
     tel: Joi.string().pattern(/^[0-9]+$/).optional().messages({
@@ -70,7 +65,6 @@ export interface UpdateAddressApiDto {
     province?: string;
     city?: string;
     district?: string;
-    town?: string;
     address?: string;
     name?: string;
     tel?: string;

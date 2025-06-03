@@ -71,8 +71,8 @@ class AddressController {
                 const userId = req.user!.id;
                 const { id: addressIdToMove } = req.params;
                 const orderData = req.body as AddressSchema.UpdateAddressOrderDto;
-                const updatedAddresses = await addressService.updateAddressOrder(userId, addressIdToMove, orderData);
-                res.status(200).json(updatedAddresses);
+                await addressService.updateAddressOrder(userId, addressIdToMove, orderData);
+                res.status(204).send();
             }
         );
 
