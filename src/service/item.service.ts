@@ -269,7 +269,10 @@ export default class ItemService {
         const user = await tx.user.findUnique({
             where: { id: currentUserId }
         })
-        const onlyAvailable = user?.role === 'USER';
+        if (!user) {
+            throw new ResponseError(401, 'Unauthorized');
+        }
+        const onlyAvailable = user.role !== 'ADMIN' && user.id !== shop.ownerId;
 
         return await tx.item.findMany({
             where: {
@@ -293,13 +296,17 @@ export default class ItemService {
     }
     async getItems(currentUserId:string,shopId:string,pageSkip:number,pageLimit:number){
         return await this.prisma.$transaction(async tx => {
-            if (!await tx.shop.findUnique({ where: { id: shopId } })) {
+            const shop = await tx.shop.findUnique({ where: { id: shopId } })
+            if (!shop) {
                 throw new ResponseError(404, 'Shop not found')
             }
             const user = await tx.user.findUnique({
                 where: { id: currentUserId }
             })
-            const onlyAvailable = user?.role === 'USER';
+            if (!user) {
+                throw new ResponseError(401, 'Unauthorized');
+            }
+            const onlyAvailable = user.role !== 'ADMIN' && user.id !== shop.ownerId;
             return await tx.item.findMany({
                 include:{categories: true, shop: true},
                 where: { 
@@ -322,10 +329,12 @@ export default class ItemService {
             throw new ResponseError(404, 'Item not found')
         }
         const currentUser = await this.prisma.user.findUnique({ where: { id: currentUserId } })
-        if(!currentUser||currentUser.role==='USER'){
-            if(!item.available){
-                throw new ResponseError(404, 'Item not found')
-            }
+        if (!currentUser) {
+            throw new ResponseError(401, 'Unauthorized')
+        }
+        const onlyAvailable = currentUser.role !== 'ADMIN' && currentUser.id !== item.shop.ownerId;
+        if (onlyAvailable && !item.available) {
+            throw new ResponseError(404, 'Item not found')
         }
         return item
     }

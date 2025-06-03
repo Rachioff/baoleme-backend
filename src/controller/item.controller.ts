@@ -21,10 +21,10 @@ class ItemController {
             validateQuery(ItemSchema.itemsQueryParams),
             async (req, res) => {
                 const { shopId, categoryId } = req.params
-                const { p, pn} = req.query as unknown as ItemSchema.itemsQueryParams
+                const { p, pn } = req.query as unknown as ItemSchema.itemsQueryParams
                 const pageSkip = parseInt(p) * parseInt(pn)
                 const pageLimit = parseInt(pn)
-                const items = await itemService.getShopCategoryItems(req.user!.id,shopId, categoryId, pageSkip, pageLimit)
+                const items = await itemService.getShopCategoryItems(req.user!.id, shopId, categoryId, pageSkip, pageLimit)
                 res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
             }
         )
@@ -35,11 +35,11 @@ class ItemController {
             validateQuery(ItemSchema.itemsQueryParams),
             validateParams(ItemSchema.shopIdParams),
             async (req, res) => {
-                const {shopId} = req.params
-                const { p, pn} = req.query as unknown as ItemSchema.itemsQueryParams
+                const { shopId } = req.params
+                const { p, pn } = req.query as unknown as ItemSchema.itemsQueryParams
                 const pageSkip = parseInt(p) * parseInt(pn)
                 const pageLimit = parseInt(pn)
-                const items = await itemService.getItems(req.user!.id,shopId, pageSkip, pageLimit)
+                const items = await itemService.getItems(req.user!.id, shopId, pageSkip, pageLimit)
                 res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
             }
         )
@@ -48,10 +48,9 @@ class ItemController {
             '/items/:id',
             authService.requireAuth(),
             validateParams(ItemSchema.itemIdParams),
-            validateQuery(ItemSchema.itemsQueryParams),
             async (req, res) => {
                 const { id } = req.params
-                const item = await itemService.getItem(req.user!.id,id)
+                const item = await itemService.getItem(req.user!.id, id)
                 res.status(200).json(await itemService.itemDataToFullItemInfo(item))
             }
         )
@@ -62,9 +61,9 @@ class ItemController {
             validateParams(ItemSchema.shopIdParams),
             validateBody(ItemSchema.createItem),
             async (req, res) => {
-                const {shopId}= req.params
+                const { shopId } = req.params
                 const request = req.body as ItemSchema.CreateItem
-                const item = await itemService.createItem(req.user!.id, shopId,request)
+                const item = await itemService.createItem(req.user!.id, shopId, request)
                 res.status(201).json(await itemService.itemDataToFullItemInfo(item))
             }
         )
@@ -94,8 +93,8 @@ class ItemController {
                 const { id } = req.params
                 const cover = req.file!
                 await itemService.updateItemImage(req.user!.id, id, cover.buffer)
-                    res.status(200).json(await itemService.getItemImageLinks(id))
-                }
+                res.status(200).json(await itemService.getItemImageLinks(id))
+            }
         )
 
         router.delete(
