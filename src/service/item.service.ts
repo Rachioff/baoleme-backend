@@ -328,7 +328,7 @@ export default class ItemService {
         return item
     }
 
-    async createItem(userId: string,shopId:string,request: CreateItem,cover: Buffer | undefined){
+    async createItem(userId: string,shopId:string,request: CreateItem){
         const { name, description, available, stockout, price, priceWithoutPromotion, categories} = request
         return await this.prisma.$transaction(async tx => {
             const user = await tx.user.findUnique({
@@ -375,13 +375,6 @@ export default class ItemService {
                 },
                 include: { categories: true, shop: true }
             })
-            const tasks = []
-            if (cover) {
-                tasks.push(
-                    this.ossService.putObject('item', `${item.id}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
-                    this.ossService.putObject('item', `${item.id}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
-            }
-            await Promise.all(tasks)
             return item
         })
     }
@@ -414,7 +407,7 @@ export default class ItemService {
                     }
                 }))
             }
-            
+
             const updatedItem = await tx.item.update({
                 where: { id },
                 data: {

@@ -49,16 +49,13 @@ class ItemController {
 
         router.post(
             '/shops/:shopId/items',
-            upload.single('cover'),
             authService.requireAuth(),
+            validateParams(ItemSchema.shopIdParams),
             validateBody(ItemSchema.createItem),
             async (req, res) => {
                 const {shopId}= req.params
                 const request = req.body as ItemSchema.CreateItem
-                const { cover } = req.files as {
-                    cover?: Express.Multer.File[]
-                }
-                const item = await itemService.createItem(req.user!.id, shopId,request, cover?.[0]?.buffer)
+                const item = await itemService.createItem(req.user!.id, shopId,request)
                 res.status(201).json(await itemService.itemDataToFullItemInfo(item))
             }
         )
@@ -72,7 +69,7 @@ class ItemController {
                 const { id } = req.params
                 let request = req.body as ItemSchema.UpdateItemProfile
                 const updatedItem = await itemService.updateItemProfile(req.user!.id, id, request)
-                res.status(200).json(await itemService.itemDataToItemProfile(updatedItem))
+                res.status(200).json(itemService.itemDataToItemProfile(updatedItem))
             }
         )
 
