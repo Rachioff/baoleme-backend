@@ -1,7 +1,7 @@
 import { Item, ItemCategory, Prisma, PrismaClient } from "@prisma/client";
 import { classInjection, injected } from "../util/injection-decorators";
 import { ResponseError } from "../util/errors";
-import { CreateItem, UpdateItem } from '../schema/item.schema'
+import { CreateItem, UpdateItemProfile } from '../schema/item.schema'
 import { asyncInitializeRoutine } from "../app/container";
 import { Logger } from "pino";
 import OSSService from "./oss.service";
@@ -245,6 +245,7 @@ export default class ItemService {
             cover: { origin: coverOrigin, thumbnail: coverThumbnail }
         }
     }
+    readonly ossContentType = 'image/webp'
 
     async itemDataToFullItemInfo(item: Prisma.ItemGetPayload<{ include: { categories: true, shop: true } }>) {
         return {
@@ -265,16 +266,52 @@ export default class ItemService {
             price: item.price,
             priceWithoutPromotion: item.priceWithoutPromotion,
             categories: item.categories.map(category => category.id),
+            rating:item.rating,
+            sale:item.sale,
         }
     }
 
-    async getItems(pageSkip: number, pageLimit: number){
+    async getShopCategoryItems(shopId:string,categoryId:string){
         return await this.prisma.$transaction(async tx => {
+            const shop = await tx.shop.findUnique({ where: { id: shopId } });
+            if (!shop) {
+                throw new ResponseError(404, 'Shop not found');
+            }
+            const category = await tx.itemCategory.findUnique({
+                where: {
+                id: categoryId,
+                shopId: shopId
+            }
+        });
+        if (!category) {
+            throw new ResponseError(404, 'Item category not found in this shop');
+        }
+        return await tx.item.findMany({
+            where: {
+                shopId: shopId,
+                categories: {
+                    some: {
+                        id: categoryId
+                    }
+                },
+                available: true
+            },
+            include: {
+                categories: true,
+                shop: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+    });
+    }
+    async getItems(shopId:string){
+        return await this.prisma.$transaction(async tx => {
+            if (!await tx.shop.findUnique({ where: { id: shopId } })) {
+                throw new ResponseError(404, 'Shop not found')
+            }
             return await tx.item.findMany({
                 include:{categories: true, shop: true},
                 where: { available: true },
-                skip: pageSkip,
-                take: pageLimit,
                 orderBy: { createdAt: 'desc' }
             })
         })        
@@ -291,8 +328,8 @@ export default class ItemService {
         return item
     }
 
-    async createItem(userId: string, request: CreateItem, cover?: Buffer){
-        const { name, description, available, stockout, price, priceWithoutPromotion, categories, shopId } = request
+    async createItem(userId: string,shopId:string,request: CreateItem,cover: Buffer | undefined){
+        const { name, description, available, stockout, price, priceWithoutPromotion, categories} = request
         return await this.prisma.$transaction(async tx => {
             const user = await tx.user.findUnique({
                 where: { id: userId }
@@ -338,27 +375,18 @@ export default class ItemService {
                 },
                 include: { categories: true, shop: true }
             })
-
+            const tasks = []
             if (cover) {
-                await this.processItemImage(item.id, cover)
+                tasks.push(
+                    this.ossService.putObject('item', `${item.id}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
+                    this.ossService.putObject('item', `${item.id}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
             }
-            
+            await Promise.all(tasks)
             return item
         })
     }
 
-    readonly ossContentType = 'image/webp'
-
-    private async processItemImage(itemId: string, cover: Buffer) {
-        const tasks = []
-        tasks.push(
-            this.ossService.putObject('item', `${itemId}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
-            this.ossService.putObject('item', `${itemId}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType)
-        )
-        await Promise.all(tasks)
-    }
-
-    async updateItem(userId: string, id: string, request: UpdateItem, cover?: Buffer){
+    async updateItemProfile(userId: string, id: string, request:UpdateItemProfile){
         const { name, description, available, stockout, price, priceWithoutPromotion, categories } = request
         return await this.prisma.$transaction(async tx => {
             const item = await tx.item.findUnique({ 
@@ -400,16 +428,31 @@ export default class ItemService {
                 },
                 include: { categories: true, shop: true }
             })
-
-            if (cover) {
-                await this.processItemImage(id, cover)
-            }
-            
             return updatedItem
         })
     }
-
-    //这是真正的删除，但是我忘记会议内容了
+    async updateItemImage(currentUserId: string, id: string, cover: Buffer | undefined) {
+            await this.prisma.$transaction(async tx => {
+                const item = await tx.item.findUnique({ 
+                    where: { id },
+                    include: { shop: true }
+                })
+                if (!item) {
+                    throw new ResponseError(404, 'Item not found')
+                }
+                const currentUser = await tx.user.findUnique({ where: { id: currentUserId } })
+                if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.id !== item.shop.ownerId)) {
+                    throw new ResponseError(403, 'Permission denied')
+                }
+            })
+            const tasks = []
+            if (cover) {
+                tasks.push(
+                    this.ossService.putObject('item', `${id}-cover.webp`, sharp(cover).toFormat('webp'), this.ossContentType),
+                    this.ossService.putObject('item', `${id}-cover-thumbnail.webp`, sharp(cover).resize(128, 128, { fit: 'outside' }).toFormat('webp'), this.ossContentType))
+            }
+            await Promise.all(tasks)
+        }
     async deleteItem(currentUserId: string, id: string) {
         await this.prisma.$transaction(async tx => {
             const item = await tx.item.findUnique({ 

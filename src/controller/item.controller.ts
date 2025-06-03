@@ -15,14 +15,23 @@ class ItemController {
         const router = Router()
 
         router.get(
-            '/items',
+            '/shops/{shopId}/item-categories/{categoryId}/items',
+            authService.requireAuth(),
+            validateParams(ItemSchema.shopIdAndcategoryIdParams),
+            async (req, res) => {
+                const { shopId, categoryId } = req.params
+                const categories = await itemService.getItemCategory(shopId,categoryId)
+                const items = await itemService.getShopCategoryItems(shopId, categoryId)
+                res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
+            }
+        )
+        router.get(
+            '/shops/:shopId/items',
             authService.requireAuth(),
             validateQuery(ItemSchema.itemsQueryParams),
             async (req, res) => {
-                const { p, pn} = req.query as unknown as ItemSchema.ItemsQueryParams
-                const pageSkip = parseInt(p) * parseInt(pn)
-                const pageLimit = parseInt(pn)
-                const items = await itemService.getItems(pageSkip, pageLimit)
+                const {shopId} = req.params
+                const items = await itemService.getItems(shopId)
                 res.status(200).json(await Promise.all(items.map(async item => itemService.itemDataToFullItemInfo(item))))
             }
         )
@@ -39,45 +48,50 @@ class ItemController {
         )
 
         router.post(
-            '/items',
-            upload.fields([
-                {
-                    name: 'cover',
-                    maxCount: 1
-                }
-            ]),
+            '/shops/:shopId/items',
+            upload.single('cover'),
             authService.requireAuth(),
             validateBody(ItemSchema.createItem),
             async (req, res) => {
+                const {shopId}= req.params
                 const request = req.body as ItemSchema.CreateItem
                 const { cover } = req.files as {
                     cover?: Express.Multer.File[]
                 }
-                const item = await itemService.createItem(req.user!.id, request, cover?.[0]?.buffer)
+                const item = await itemService.createItem(req.user!.id, shopId,request, cover?.[0]?.buffer)
                 res.status(201).json(await itemService.itemDataToFullItemInfo(item))
             }
         )
 
         router.patch(
-            '/items/:id',
-            upload.fields([
-                {
-                    name: 'cover',
-                    maxCount: 1
-                }
-            ]),
+            '/items/:id/profile',
             authService.requireAuth(),
             validateParams(ItemSchema.itemIdParams),
-            validateBody(ItemSchema.updateItem),
+            validateBody(ItemSchema.updateItemProfile),
             async (req, res) => {
                 const { id } = req.params
-                let request = req.body as ItemSchema.UpdateItem
-                const { cover } = req.files as {
+                let request = req.body as ItemSchema.UpdateItemProfile
+                const updatedItem = await itemService.updateItemProfile(req.user!.id, id, request)
+                res.status(200).json(await itemService.itemDataToItemProfile(updatedItem))
+            }
+        )
+
+        router.patch(
+            '/items/:id/cover',
+            upload.single('cover'),
+            authService.requireAuth(),
+            validateParams(ItemSchema.itemIdParams),
+            acceptMimeTypes(/^image\//),
+            acceptMaximumSize(4 * 1024 * 1024),
+            validateImage(),
+            async (req, res) => {
+                const { id } = req.params
+                const { cover} = req.files as {
                     cover?: Express.Multer.File[]
                 }
-                const updatedItem = await itemService.updateItem(req.user!.id, id, request, cover?.[0]?.buffer)
-                res.status(200).json(await itemService.itemDataToFullItemInfo(updatedItem))
-            }
+                await itemService.updateItemImage(req.user!.id,id,cover?.[0].buffer)
+                    res.status(200).json(await itemService.getItemImageLinks(id))
+                }
         )
 
         router.delete(

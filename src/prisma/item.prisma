@@ -11,4 +11,6 @@ model Item {
     shop                    Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
     shopId                  String          @db.Uuid
     categories              ItemCategory[]
+    rating                  Int             @default(0)
+    sale                    Int             @default(0)
 } 
