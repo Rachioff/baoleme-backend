@@ -5,7 +5,17 @@ model Shop {
     name                String
     description         String
     categories          ShopCategory[]
-    address             ShopAddress?
+    
+    addressLatitude     Float
+    addressLongitude    Float
+    addressProvince     String
+    addressCity         String
+    addressDistrict     String
+    addressTown         String
+    addressAddress      String
+    addressName         String
+    addressTel          String
+
     verified            Boolean         @default(false)
     opened              Boolean         @default(false)
     openTimeStart       Int
@@ -20,4 +30,5 @@ model Shop {
     updatedAt           DateTime        @updatedAt
     items               Item[]
     itemCategories      ItemCategory[]
+    orders              Order[]
 }

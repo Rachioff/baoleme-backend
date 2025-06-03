@@ -1,17 +1,15 @@
-FROM node:22.14.0
+FROM node:22.16.0
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install -D
+RUN npm ci
 
 COPY . .
 
-RUN npx prisma generate
-
-RUN npx tsc -p .
+RUN npm run build
 
 EXPOSE 3000
 
-CMD npx prisma migrate deploy && node .
+CMD sh scripts/start-server.sh

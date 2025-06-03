@@ -6,9 +6,11 @@ class AppFactory {
     @factoryMethod
     static app(
         @injected('apiRoute') apiRoute: Router,
+        @injected('staticRoute') staticRoute: Router
     ) {
         const app = express()
         app.use('/api', apiRoute)
+        app.use('/', staticRoute)
 
         return app
     }

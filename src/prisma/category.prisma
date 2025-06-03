@@ -13,6 +13,6 @@ model ItemCategory {
     
     shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
     shopId  String  @db.Uuid
-    
+
     items   Item[]
 }
