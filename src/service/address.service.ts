@@ -37,7 +37,7 @@ export default class AddressService {
             city: dbAddress.city,
             district: dbAddress.district,
             town: dbAddress.town ?? "",
-            address: dbAddress.detailedAddress,
+            address: dbAddress.detail,
             name: dbAddress.recipientName,
             tel: dbAddress.phoneNumber,
             isDefault: dbAddress.isDefault,
@@ -45,19 +45,19 @@ export default class AddressService {
     }
 
     /**
-     * 一个辅助方法：重新调整用户地址的 sortOrder
+     * 一个辅助方法：重新调整用户地址的 displayOrder
      */
-    private async reorderSortOrders(
+    private async reorderdisplayOrders(
         tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>,
         userId: string
     ): Promise<void> {
         const addresses = await tx.address.findMany({
             where: { userId },
-            orderBy: { sortOrder: 'asc' },
+            orderBy: { displayOrder: 'asc' },
         });
         for (let i = 0; i < addresses.length; i++) {
-            if (addresses[i].sortOrder !== i) {
-                await tx.address.update({ where: { id: addresses[i].id }, data: { sortOrder: i } });
+            if (addresses[i].displayOrder !== i) {
+                await tx.address.update({ where: { id: addresses[i].id }, data: { displayOrder: i } });
             }
         }
     }
@@ -69,7 +69,7 @@ export default class AddressService {
         const newDbAddress = await this.prisma.$transaction(async (tx) => {
             const currentAddresses = await tx.address.findMany({
                 where: { userId },
-                orderBy: { sortOrder: 'asc' },
+                orderBy: { displayOrder: 'asc' },
             });
 
             if (currentAddresses.length >= MAX_ADDRESSES_PER_USER) {
@@ -84,7 +84,7 @@ export default class AddressService {
             }
 
             // 新地址总是添加到末尾
-            const targetSortOrder = currentAddresses.length;
+            const targetdisplayOrder = currentAddresses.length;
 
             const createdAddress = await tx.address.create({
                 data: {
@@ -95,11 +95,11 @@ export default class AddressService {
                     city: apiAddressData.city,
                     district: apiAddressData.district,
                     town: apiAddressData.town,
-                    detailedAddress: apiAddressData.address,
+                    detail: apiAddressData.address,
                     longitude,
                     latitude,
                     isDefault: apiAddressData.isDefault,
-                    sortOrder: targetSortOrder,
+                    displayOrder: targetdisplayOrder,
                 },
             });
             return createdAddress;
@@ -111,7 +111,7 @@ export default class AddressService {
         this.logger.info({ userId }, '获取用户地址列表');
         const dbAddresses = await this.prisma.address.findMany({
             where: { userId },
-            orderBy: { sortOrder: 'asc' },
+            orderBy: { displayOrder: 'asc' },
         });
         return dbAddresses.map(addr => this.mapDbAddressToApiResponse(addr));
     }
@@ -136,22 +136,17 @@ export default class AddressService {
     async updateAddress(currentUserId: string, addressId: string, apiAddressData: UpdateAddressApiDto): Promise<ApiAddressResponse> {
         this.logger.info({ currentUserId, addressId, apiAddressData }, '尝试更新地址');
         
-        const dataToUpdate: Prisma.AddressUpdateInput = {};
-        if (apiAddressData.name !== undefined) dataToUpdate.recipientName = apiAddressData.name;
-        if (apiAddressData.tel !== undefined) dataToUpdate.phoneNumber = apiAddressData.tel;
-        if (apiAddressData.province !== undefined) dataToUpdate.province = apiAddressData.province;
-        if (apiAddressData.city !== undefined) dataToUpdate.city = apiAddressData.city;
-        if (apiAddressData.district !== undefined) dataToUpdate.district = apiAddressData.district;
-        if (apiAddressData.town !== undefined) dataToUpdate.town = apiAddressData.town;
-        if (apiAddressData.address !== undefined) dataToUpdate.detailedAddress = apiAddressData.address;
-        if (apiAddressData.coordinate) {
-            dataToUpdate.longitude = apiAddressData.coordinate[0];
-            dataToUpdate.latitude = apiAddressData.coordinate[1];
-        }
-        if (apiAddressData.isDefault !== undefined) dataToUpdate.isDefault = apiAddressData.isDefault;
-
-        if (Object.keys(dataToUpdate).length === 0) {
-            throw new ResponseError(400, '没有提供任何需要更新的字段');
+        const dataToUpdate: Prisma.AddressUpdateInput = {
+            recipientName: apiAddressData.name,
+            phoneNumber: apiAddressData.tel,
+            province: apiAddressData.province,
+            city: apiAddressData.city,
+            district: apiAddressData.district,
+            town: apiAddressData.town,
+            detail: apiAddressData.address,
+            longitude: apiAddressData.coordinate?.[0],
+            latitude: apiAddressData.coordinate?.[1],
+            isDefault: apiAddressData.isDefault
         }
 
         const updatedDbAddress = await this.prisma.$transaction(async (tx) => {
@@ -161,7 +156,7 @@ export default class AddressService {
             if (existingAddress.userId !== currentUserId) throw new ResponseError(403, '无权修改此地址');
 
             if (typeof apiAddressData.isDefault === 'boolean' && apiAddressData.isDefault) {
-                if (!existingAddress.isDefault || (Object.keys(dataToUpdate).length > 1) ) { // 确保只在需要时或有其他更新时执行
+                if (!existingAddress.isDefault || (Object.keys(dataToUpdate).length > 1) ) { 
                     await tx.address.updateMany({
                         where: { userId: currentUserId, isDefault: true, NOT: { id: addressId } },
                         data: { isDefault: false },
@@ -177,46 +172,107 @@ export default class AddressService {
     async updateAddressOrder(currentUserId: string, addressIdToMove: string, orderData: UpdateAddressOrderDto): Promise<ApiAddressResponse[]> {
         this.logger.info({ currentUserId, addressIdToMove, orderData }, '尝试更新地址次序');
 
-        return this.prisma.$transaction(async (tx) => {
-            const addresses = await tx.address.findMany({
-                where: { userId: currentUserId },
-                orderBy: { sortOrder: 'asc' },
+        await this.prisma.$transaction(async (tx) => {
+            const addressToMove = await tx.address.findUnique({
+                where: { id: addressIdToMove },
             });
 
-            const addressToMove = addresses.find(addr => addr.id === addressIdToMove);
-            if (!addressToMove) {
-                throw new ResponseError(404, '需要移动的地址未找到');
+            if (!addressToMove || addressToMove.userId !== currentUserId) {
+                throw new ResponseError(404, '需要移动的地址未找到或不属于当前用户');
             }
 
-            const remainingAddresses = addresses.filter(addr => addr.id !== addressIdToMove);
-            let targetIndex: number;
+            const { before } = orderData; // ID of the address that addressIdToMove should be placed BEFORE. null means move to the end.
 
-            if (orderData.before === null) {
-                targetIndex = remainingAddresses.length;
-            } else {
-                targetIndex = remainingAddresses.findIndex(addr => addr.id === orderData.before);
-                if (targetIndex === -1) {
-                    throw new ResponseError(400, '目标位置 (before) 地址未找到');
+            if (before) { // Move before a specific address
+                const beforeAddress = await tx.address.findUnique({
+                    where: { id: before },
+                });
+
+                if (!beforeAddress || beforeAddress.userId !== currentUserId) {
+                    throw new ResponseError(404, '目标位置 (before) 地址未找到或不属于当前用户');
                 }
-            }
 
-            remainingAddresses.splice(targetIndex, 0, addressToMove);
+                if (addressToMove.id === beforeAddress.id) {
+                    // Cannot move an address before itself, no operation needed.
+                    return;
+                }
+                
+                // If displayOrders happen to be the same (which ideally shouldn't for different items if managed strictly)
+                // the logic below will still attempt to place addressToMove correctly relative to beforeAddress.
+                // The item.service.ts check `if (category.order === beforeCategory.order) { return }`
+                // might be for cases where orders are not strictly unique or if it's already in the exact target slot.
+                // Our logic aims to achieve the state "addressToMove is immediately before beforeAddress".
 
-            for (let i = 0; i < remainingAddresses.length; i++) {
-                if (remainingAddresses[i].sortOrder !== i) {
+                if (addressToMove.displayOrder < beforeAddress.displayOrder) {
+                    // addressToMove is currently to the "left" of beforeAddress (e.g., A(0), B(1), C(2), D(3). Move A before D. A.order=0, D.order=3)
+                    // Target state: B(0), C(1), A(2), D(3). A's new order is D.order - 1 = 2.
+                    // Items between A's old order (exclusive) and D's order (exclusive) shift left. (B and C)
+                    await tx.address.updateMany({
+                        where: {
+                            userId: currentUserId,
+                            displayOrder: { gt: addressToMove.displayOrder, lt: beforeAddress.displayOrder },
+                        },
+                        data: { displayOrder: { decrement: 1 } },
+                    });
                     await tx.address.update({
-                        where: { id: remainingAddresses[i].id },
-                        data: { sortOrder: i },
+                        where: { id: addressIdToMove },
+                        data: { displayOrder: beforeAddress.displayOrder - 1 },
+                    });
+                } else { // addressToMove.displayOrder > beforeAddress.displayOrder
+                    // addressToMove is currently to the "right" of beforeAddress (e.g., B(0), C(1), D(2), A(3). Move A before B. A.order=3, B.order=0)
+                    // Target state: A(0), B(1), C(2), D(3). A's new order is B.order = 0.
+                    // Items from B's order (inclusive) to A's old order (exclusive) shift right. (B, C, D)
+                    await tx.address.updateMany({
+                        where: {
+                            userId: currentUserId,
+                            displayOrder: { gte: beforeAddress.displayOrder, lt: addressToMove.displayOrder },
+                        },
+                        data: { displayOrder: { increment: 1 } },
+                    });
+                    await tx.address.update({
+                        where: { id: addressIdToMove },
+                        data: { displayOrder: beforeAddress.displayOrder },
+                    });
+                }
+            } else { // Move to the end
+                const maxOrderAgg = await tx.address.aggregate({
+                    where: { userId: currentUserId },
+                    _max: { displayOrder: true },
+                });
+                const maxDisplayOrder = maxOrderAgg._max.displayOrder;
+
+                if (maxDisplayOrder === null) { 
+                    // This implies no addresses exist for the user, or only this one.
+                    // If only this one, setting its order to 0 is appropriate.
+                    await tx.address.update({
+                        where: { id: addressIdToMove },
+                        data: { displayOrder: 0 },
+                    });
+                } else {
+                    // Shift addresses that were logically after the old position of addressToMove
+                    await tx.address.updateMany({
+                        where: {
+                            userId: currentUserId,
+                            displayOrder: { gt: addressToMove.displayOrder },
+                        },
+                        data: { displayOrder: { decrement: 1 } },
+                    });
+
+                    await tx.address.update({
+                        where: { id: addressIdToMove },
+                        data: { displayOrder: maxDisplayOrder },
                     });
                 }
             }
-            const updatedAddresses = await tx.address.findMany({
-                where: {userId: currentUserId},
-                orderBy: {sortOrder: 'asc'}
-            });
-            return updatedAddresses.map(addr => this.mapDbAddressToApiResponse(addr));
         });
+
+        const updatedAddresses = await this.prisma.address.findMany({
+            where: { userId: currentUserId },
+            orderBy: { displayOrder: 'asc' },
+        });
+        return updatedAddresses.map(addr => this.mapDbAddressToApiResponse(addr));
     }
+
 
     async deleteAddress(currentUserId: string, addressId: string): Promise<void> {
         this.logger.info({ currentUserId, addressId }, '尝试删除地址');
@@ -229,10 +285,16 @@ export default class AddressService {
 
             await tx.address.delete({ where: { id: addressId } });
 
+            // After deleting, reorder the displayOrder for remaining addresses.
+            // This is important to maintain a consistent order if displayOrder is used for UI.
+            await this.reorderdisplayOrders(tx, currentUserId);
+
+
+            // If the deleted address was the default, set the new first address (if any) as default.
             if (addressToDelete.isDefault) {
-                const nextDefaultAddress = await tx.address.findFirst({
+                const nextDefaultAddress = await tx.address.findFirst({ // findFirst will use the orderBy from reorderdisplayOrders
                     where: { userId: currentUserId },
-                    orderBy: { sortOrder: 'asc' },
+                    orderBy: { displayOrder: 'asc' }, 
                 });
                 if (nextDefaultAddress) {
                     await tx.address.update({
@@ -241,7 +303,6 @@ export default class AddressService {
                     });
                 }
             }
-            await this.reorderSortOrders(tx, currentUserId);
         });
     }
 
@@ -253,7 +314,7 @@ export default class AddressService {
 
             if (!addressToSetDefault) throw new ResponseError(404, '收货地址未找到');
             if (addressToSetDefault.userId !== currentUserId) throw new ResponseError(403, '无权操作此地址');
-            if (addressToSetDefault.isDefault) return addressToSetDefault;
+            if (addressToSetDefault.isDefault) return addressToSetDefault; // Already default
 
             await tx.address.updateMany({
                 where: { userId: currentUserId, isDefault: true },

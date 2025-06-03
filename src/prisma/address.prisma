@@ -23,6 +23,6 @@ model Address {
     createdAt     DateTime  @default(now())
     updatedAt     DateTime  @updatedAt
 
-    @@index([userId, displayOrder]) 
+    @@index([userId]) 
     @@map("addresses")
 }
