@@ -9,6 +9,7 @@ model Address {
     province      String
     city          String
     district      String
+
     detail        String    @map("address")
 
     longitude     Float    // 这里经纬度好像说Prisma不直接支持存储无类型的数组作为坐标，所以变成两个浮点数了。
@@ -23,5 +24,6 @@ model Address {
     updatedAt     DateTime  @updatedAt
 
     @@index([userId]) 
+
     @@map("addresses")
 }
